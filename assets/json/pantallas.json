@@ -1,0 +1,65 @@
+{
+    "exercises": [
+      {
+        "name": "Sentadillas",
+        "description": "Ejercicio para piernas y glúteos.",
+        "image": "assets/img/sentadilla.png"
+      },
+      {
+        "name": "Flexiones de pecho",
+        "description": "Ejercicio para pectorales y tríceps.",
+        "image": "assets/img/flexiones.png"
+      },
+      {
+        "name": "Plancha abdominal",
+        "description": "Ejercicio para abdomen.",
+        "image": "assets/img/plancha.png"
+      },
+      {
+        "name": "Fondos de tríceps",
+        "description": "Ejercicio para tríceps y hombros.",
+        "image": "assets/img/triceps.png"
+      },
+      {
+        "name": "Mountain climbers",
+        "description": "Ejercicio cardiovascular y de core.",
+        "image": "assets/img/montain_climbers.png"
+      },
+      {
+        "name": "Burpees",
+    "description": "Ejercicio total cuerpo que combina flexiones, saltos y sentadillas.",
+    "image": "assets/img/burpees.png"
+      },
+      {
+        "name": "Remo con mancuerna",
+    "description": "Ejercicio para la espalda que utiliza una sola mancuerna.",
+    "image": "assets/img/remo_mancuerna.png"
+      },
+      {
+        "name": "Press de hombros con mancuernas",
+    "description": "Ejercicio para fortalecer los hombros.",
+    "image": "assets/img/press_hombros_mancuernas.png"
+      },
+      {
+        "name": "Curl de bíceps con mancuernas",
+    "description": "Ejercicio para trabajar y desarrollar los músculos del bíceps.",
+    "image": "assets/img/curl_biceps_mancuernas.png"
+      },
+      {
+        "name": "Curl concentrado con mancuerna",
+        "description": "Ejercicio que aísla el bíceps braquial para un desarrollo focalizado.",
+        "image": "assets/img/curl_concentrado_mancuerna.png"
+      },
+      {
+        "name": "Fly de pecho con polea",
+        "description": "Ejercicio que aísla y trabaja los músculos pectorales utilizando una polea.",
+        "image": "assets/img/fly_pecho_polea.png"
+      },
+      {
+        "name": "Cruces de poleas para pecho",
+        "description": "Ejercicio que trabaja los músculos pectorales medios y altos utilizando poleas.",
+        "image": "assets/img/cruces_poleas_pecho.png"
+      }
+
+    ]
+  }
