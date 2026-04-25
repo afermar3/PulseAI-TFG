@@ -5,34 +5,34 @@ packages:
     dependency: "direct main"
     description:
       name: animated_toggle_switch
-      sha256: "35e3d6c74eef79c415ac3986046c35cb1ea42720afce13ec7f1a014f72dfd71c"
+      sha256: faecb2339cde5e7d299389cf7e01cf35305a3ba212ae8ff51c02ce8385d1d273
       url: "https://pub.dev"
     source: hosted
-    version: "0.8.2"
+    version: "0.8.7"
   async:
     dependency: transitive
     description:
       name: async
-      sha256: "947bfcf187f74dbc5e146c9eb9c0f10c9f8b30743e341481c1e2ed3ecc18c20c"
+      sha256: e2eb0491ba5ddb6177742d2da23904574082139b07c1e33b8503b9f46f3e1a37
       url: "https://pub.dev"
     source: hosted
-    version: "2.11.0"
+    version: "2.13.1"
   boolean_selector:
     dependency: transitive
     description:
       name: boolean_selector
-      sha256: "6cfb5af12253eaf2b368f07bacc5a80d1301a071c73360d746b7f2e32d762c66"
+      sha256: "8aab1771e1243a5063b8b0ff68042d67334e3feab9e95b9490f9a6ebf73b42ea"
       url: "https://pub.dev"
     source: hosted
-    version: "2.1.1"
+    version: "2.1.2"
   carousel_slider:
     dependency: "direct main"
     description:
       name: carousel_slider
-      sha256: "9c695cc963bf1d04a47bd6021f68befce8970bcd61d24938e1fb0918cf5d9c42"
+      sha256: febf4b0163e0242adc13d7a863b04965351f59e7dfea56675c7c2caa7bcd7476
       url: "https://pub.dev"
     source: hosted
-    version: "4.2.1"
+    version: "5.1.2"
   characters:
     dependency: transitive
     description:
@@ -61,10 +61,10 @@ packages:
     dependency: "direct main"
     description:
       name: cupertino_icons
-      sha256: ba631d1c7f7bef6b729a622b7b752645a2d076dba9976925b8f25725a30e1ee6
+      sha256: "41e005c33bd814be4d3096aff55b1908d419fde52ca656c8c47719ec745873cd"
       url: "https://pub.dev"
     source: hosted
-    version: "1.0.8"
+    version: "1.0.9"
   dotted_dashed_line:
     dependency: "direct main"
     description:
@@ -77,10 +77,10 @@ packages:
     dependency: transitive
     description:
       name: equatable
-      sha256: c2b87cb7756efdf69892005af546c56c0b5037f54d2a88269b4f347a505e3ca2
+      sha256: "3e0141505477fd8ad55d6eb4e7776d3fe8430be8e497ccb1521370c3f21a3e2b"
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.5"
+    version: "2.0.8"
   fake_async:
     dependency: transitive
     description:
@@ -93,10 +93,10 @@ packages:
     dependency: "direct main"
     description:
       name: fl_chart
-      sha256: d0f0d49112f2f4b192481c16d05b6418bd7820e021e265a3c22db98acf7ed7fb
+      sha256: b938f77d042cbcd822936a7a359a7235bad8bd72070de1f827efc2cc297ac888
       url: "https://pub.dev"
     source: hosted
-    version: "0.68.0"
+    version: "1.2.0"
   flutter:
     dependency: "direct main"
     description: flutter
@@ -106,10 +106,10 @@ packages:
     dependency: "direct dev"
     description:
       name: flutter_lints
-      sha256: a25a15ebbdfc33ab1cd26c63a6ee519df92338a9c10f122adda92938253bef04
+      sha256: "3105dc8492f6183fb076ccf1f351ac3d60564bff92e20bfc4af9cc1651f4e7e1"
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.3"
+    version: "6.0.0"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -148,10 +148,10 @@ packages:
     dependency: transitive
     description:
       name: lints
-      sha256: "0a217c6c989d21039f1498c3ed9f3ed71b354e69873f13a8dfc3c9fe76f1b452"
+      sha256: "12f842a479589fea194fe5c5a3095abc7be0c1f2ddfa9a0e76aed1dbd26a87df"
       url: "https://pub.dev"
     source: hosted
-    version: "2.1.1"
+    version: "6.1.0"
   matcher:
     dependency: transitive
     description:
@@ -196,10 +196,10 @@ packages:
     dependency: "direct main"
     description:
       name: simple_animation_progress_bar
-      sha256: "9dd1699a99866d185cd268fc5badabe25a2777debe31d374d84d4d5894cb4309"
+      sha256: "57d4a6f838020deb1ae69600be9365cd3d85e7416dc0a5e66b490581e4fddcd8"
       url: "https://pub.dev"
     source: hosted
-    version: "1.8.2"
+    version: "1.9.2"
   simple_circular_progress_bar:
     dependency: "direct main"
     description:
@@ -217,10 +217,10 @@ packages:
     dependency: transitive
     description:
       name: source_span
-      sha256: "53e943d4206a5e30df338fd4c6e7a077e02254531b138a15aec3bd143c1a8b3c"
+      sha256: "56a02f1f4cd1a2d96303c0144c93bd6d909eea6bee6bf5a0e0b685edbd4c47ab"
       url: "https://pub.dev"
     source: hosted
-    version: "1.10.0"
+    version: "1.10.2"
   stack_trace:
     dependency: transitive
     description:
@@ -241,18 +241,18 @@ packages:
     dependency: transitive
     description:
       name: string_scanner
-      sha256: "556692adab6cfa87322a115640c11f13cb77b3f076ddcc5d6ae3c20242bedcde"
+      sha256: "921cd31725b72fe181906c6a94d987c78e3b98c2e205b397ea399d4054872b43"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.0"
+    version: "1.4.1"
   term_glyph:
     dependency: transitive
     description:
       name: term_glyph
-      sha256: a29248a84fbb7c79282b40b8c72a1209db169a2e0542bce341da992fe1bc7e84
+      sha256: "7f554798625ea768a7518313e58f83891c7f5024f88e46e7182a4558850a4b8e"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.1"
+    version: "1.2.2"
   test_api:
     dependency: transitive
     description:
@@ -278,5 +278,5 @@ packages:
     source: hosted
     version: "15.1.0"
 sdks:
-  dart: ">=3.9.0-0 <4.0.0"
-  flutter: ">=3.18.0-18.0.pre.54"
+  dart: ">=3.9.0 <4.0.0"
+  flutter: ">=3.27.4"

@@ -14,7 +14,7 @@ class objetivo extends StatefulWidget {
 }
 
 class _objetivoView extends State<objetivo> {
-  CarouselController buttonCarouselController = CarouselController();
+  CarouselSliderController buttonCarouselController = CarouselSliderController();
 //convertir en fichero json
   List objetivos = [
     {

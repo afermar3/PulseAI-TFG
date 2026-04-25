@@ -390,7 +390,7 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
         break;
     }
     return SideTitleWidget(
-      axisSide: meta.axisSide,
+      meta: meta,
       space: 16,
       child: text,
     );

@@ -391,7 +391,7 @@ class _Homepantalla extends State<Home> {
                                 }).toList();
                               },
                               touchTooltipData: LineTouchTooltipData(
-                                tooltipRoundedRadius: 20,
+                                tooltipBorderRadius: BorderRadius.circular(20),
                                 getTooltipItems:
                                     (List<LineBarSpot> lineBarsSpot) {
                                   return lineBarsSpot.map((lineBarSpot) {
@@ -448,7 +448,7 @@ class _Homepantalla extends State<Home> {
                               height: media.width * 0.85,
                               width: media.width * 0.07,
                               backgroundColor: Colors.grey.shade100,
-                              foregrondColor: Colors.purple,
+                              foregroundColor: Colors.purple,
                               ratio: 0.5,
                               direction: Axis.vertical,
                               curve: Curves.fastLinearToSlowEaseIn,
@@ -842,7 +842,7 @@ class _Homepantalla extends State<Home> {
                             }).toList();
                           },
                           touchTooltipData: LineTouchTooltipData(
-                            tooltipRoundedRadius: 20,
+                            tooltipBorderRadius: BorderRadius.circular(20),
                             getTooltipItems: (List<LineBarSpot> lineBarsSpot) {
                               return lineBarsSpot.map((lineBarSpot) {
                                 return LineTooltipItem(
@@ -1122,8 +1122,8 @@ class _Homepantalla extends State<Home> {
     }
 
     return SideTitleWidget(
-      axisSide: meta.axisSide,
-      space: 10,
+      meta: meta,
+      space: 16,
       child: text,
     );
   }
