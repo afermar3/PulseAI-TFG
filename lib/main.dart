@@ -1,4 +1,4 @@
-import 'package:afermar3_tf_ipc/pantallas_iniciales/principal.dart';
+import 'package:afermar3_tf_ipc/pantallas_iniciales/screen_inicial.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:flutter/material.dart';
 
@@ -12,7 +12,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'GYMFIT',
+      title: 'PULSEAI',
       home: const StartedView(),
     );
   }

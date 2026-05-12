@@ -1,9 +1,11 @@
+import 'package:afermar3_tf_ipc/Home/pantalla_home.dart';
+import 'package:afermar3_tf_ipc/funcionalidad/menu_principal.dart';
 import 'package:afermar3_tf_ipc/funcionalidad/objetivo.dart';
-import 'package:afermar3_tf_ipc/info_user/register_view.dart';
+import 'package:afermar3_tf_ipc/home/pantalla_home.dart';
 import 'package:afermar3_tf_ipc/info_user/sign_up_view.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
-import 'package:afermar3_tf_ipc/widgets/campostexto.dart';
 import 'package:afermar3_tf_ipc/widgets/boton.dart';
+import 'package:afermar3_tf_ipc/widgets/campostexto.dart';
 import 'package:flutter/material.dart';
 
 class Login extends StatefulWidget {
@@ -14,86 +16,100 @@ class Login extends StatefulWidget {
 }
 
 class _LoginView extends State<Login> {
-  bool isCheck = false;
   final _formKey = GlobalKey<FormState>();
+  bool obscurePassword = true;
+
   @override
   Widget build(BuildContext context) {
-    var media = MediaQuery.of(context).size;
+    final media = MediaQuery.of(context).size;
+
     return Scaffold(
       backgroundColor: TColor.blanco,
-      body: SingleChildScrollView(
-        child: SafeArea(
-          child: Container(
-            height: media.height * 0.9,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: media.height - MediaQuery.of(context).padding.top,
+            ),
             child: Form(
               key: _formKey,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  const SizedBox(height: 35),
+
                   Text(
                     "Hola de nuevo,",
-                    style: TextStyle(color: TColor.gris, fontSize: 16),
+                    style: TextStyle(color: TColor.gris, fontSize: 17),
                   ),
+
+                  const SizedBox(height: 4),
+
                   Text(
-                    "Logeate",
+                    "Inicia sesión",
                     style: TextStyle(
-                        color: TColor.negro,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700),
+                      color: TColor.negro,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                  SizedBox(
-                    height: media.width * 0.05,
-                  ),
-                  SizedBox(
-                    height: media.width * 0.04,
-                  ),
+
+                  SizedBox(height: media.height * 0.07),
+
                   const EditTextField(
-                    hintText: "Correo",
+                    hintText: "Correo electrónico",
                     icon: "assets/img/email.png",
                     keyboardType: TextInputType.emailAddress,
                     validator: validateEmail,
                   ),
-                  SizedBox(
-                    height: media.width * 0.04,
-                  ),
+
+                  const SizedBox(height: 16),
+
                   EditTextField(
                     hintText: "Contraseña",
                     icon: "assets/img/lock.png",
-                    obscureText: true,
+                    obscureText: obscurePassword,
                     validator: validatecontra,
-                    rightIcon: TextButton(
-                        onPressed: () {},
-                        child: Container(
-                            alignment: Alignment.center,
-                            width: 20,
-                            height: 20,
-                            child: Image.asset(
-                              "assets/img/show_password.png",
-                              width: 20,
-                              height: 20,
-                              fit: BoxFit.contain,
-                              color: TColor.gris,
-                            ))),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        "Has olvidado tu constraseña?",
-                        style: TextStyle(
-                            color: TColor.gris,
-                            fontSize: 10,
-                            decoration: TextDecoration.underline),
+                    rightIcon: IconButton(
+                      onPressed: () {
+                        setState(() {
+                          obscurePassword = !obscurePassword;
+                        });
+                      },
+                      icon: Icon(
+                        obscurePassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: TColor.gris,
+                        size: 22,
                       ),
-                    ],
+                    ),
                   ),
-                  const Spacer(), //falta controlador para campo de texto
+
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        // Más adelante aquí pondremos recuperación de contraseña
+                      },
+                      child: Text(
+                        "¿Has olvidado tu contraseña?",
+                        style: TextStyle(
+                          color: TColor.gris,
+                          fontSize: 12,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  SizedBox(height: media.height * 0.22),
+
                   botonredondo(
-                    title: "Login",
+                    title: "Iniciar sesión",
                     onPressed: () {
                       if (_formKey.currentState!.validate()) {
-                        Navigator.push(
+                        Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
                             builder: (context) => const objetivo(),
@@ -102,121 +118,137 @@ class _LoginView extends State<Login> {
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content:
-                                Text('Por favor completa todos los campos.'),
+                            content: Text(
+                              'Por favor completa todos los campos.',
+                            ),
                           ),
                         );
                       }
                     },
                   ),
-                  SizedBox(
-                    height: media.width * 0.04,
-                  ),
+
+                  const SizedBox(height: 24),
+
                   Row(
                     children: [
                       Expanded(
-                          child: Container(
-                        height: 1,
-                        color: TColor.gris.withOpacity(0.5),
-                      )),
+                        child: Container(
+                          height: 1,
+                          color: TColor.gris.withOpacity(0.3),
+                        ),
+                      ),
                       Text(
                         "  O  ",
-                        style: TextStyle(color: TColor.negro, fontSize: 12),
+                        style: TextStyle(color: TColor.gris, fontSize: 13),
                       ),
                       Expanded(
-                          child: Container(
-                        height: 1,
-                        color: TColor.gris.withOpacity(0.5),
-                      )),
+                        child: Container(
+                          height: 1,
+                          color: TColor.gris.withOpacity(0.3),
+                        ),
+                      ),
                     ],
                   ),
-                  SizedBox(
-                    height: media.width * 0.04,
-                  ),
+
+                  const SizedBox(height: 22),
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      GestureDetector(
-                        onTap: () {},
-                        child: Container(
-                          width: 50,
-                          height: 50,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: TColor.blanco,
-                            border: Border.all(
-                              width: 1,
-                              color: TColor.gris.withOpacity(0.4),
-                            ),
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          child: Image.asset(
-                            "assets/img/google.png",
-                            width: 20,
-                            height: 20,
-                          ),
-                        ),
+                      _SocialButton(
+                        image: "assets/img/google.png",
+                        onTap: () {
+                          // Más adelante login con Google
+                        },
                       ),
-                      SizedBox(
-                        width: media.width * 0.04,
+                      const SizedBox(width: 18),
+                      _SocialButton(
+                        image: "assets/img/facebook.png",
+                        onTap: () {
+                          // Más adelante login con Facebook
+                        },
                       ),
-                      GestureDetector(
-                        onTap: () {},
-                        child: Container(
-                          width: 50,
-                          height: 50,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: TColor.blanco,
-                            border: Border.all(
-                              width: 1,
-                              color: TColor.gris.withOpacity(0.4),
-                            ),
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          child: Image.asset(
-                            "assets/img/facebook.png",
-                            width: 20,
-                            height: 20,
-                          ),
-                        ),
-                      )
                     ],
                   ),
-                  SizedBox(
-                    height: media.width * 0.04,
-                  ),
+
+                  const SizedBox(height: 26),
+
                   TextButton(
                     onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          "Aun no tienes una cuenta creada? ",
-                          style: TextStyle(
-                            color: TColor.negro,
-                            fontSize: 14,
-                          ),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SignUp(),
                         ),
-                        Text(
-                          "Registrar",
-                          style: TextStyle(
+                      );
+                    },
+                    child: RichText(
+                      text: TextSpan(
+                        text: "¿Aún no tienes una cuenta? ",
+                        style: TextStyle(
+                          color: TColor.negro,
+                          fontSize: 14,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: "Regístrate",
+                            style: TextStyle(
                               color: TColor.rojo,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700),
-                        )
-                      ],
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  SizedBox(
-                    height: media.width * 0.04,
-                  ),
+
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SocialButton extends StatelessWidget {
+  final String image;
+  final VoidCallback onTap;
+
+  const _SocialButton({
+    required this.image,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 56,
+        height: 56,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: TColor.blanco,
+          border: Border.all(
+            width: 1,
+            color: TColor.gris.withOpacity(0.25),
+          ),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Image.asset(
+          image,
+          width: 24,
+          height: 24,
         ),
       ),
     );

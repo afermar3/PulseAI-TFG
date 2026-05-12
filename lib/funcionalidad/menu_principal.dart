@@ -1,4 +1,4 @@
-import 'package:afermar3_tf_ipc/funcionalidad/pantallas/Home/pantalla_home.dart';
+import 'package:afermar3_tf_ipc/Home/pantalla_home.dart';
 import 'package:afermar3_tf_ipc/funcionalidad/pantallas/pantalla_info_personal.dart';
 import 'package:afermar3_tf_ipc/funcionalidad/pantallas/pantallanodispo.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
@@ -61,10 +61,7 @@ class _MenuPrincipal extends State<Menu> {
               color: Color.fromARGB(31, 91, 64, 188),
               blurRadius: 2,
               offset: Offset(0, -2))
-        ]
-        
-        ),
-        
+        ]),
         height: kToolbarHeight,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -100,3 +97,4 @@ class _MenuPrincipal extends State<Menu> {
     );
   }
 }
+ 

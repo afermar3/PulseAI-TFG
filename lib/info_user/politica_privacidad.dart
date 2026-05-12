@@ -1,4 +1,4 @@
-import 'package:afermar3_tf_ipc/funcionalidad/pantallas/Home/pantalla_home.dart';
+import 'package:afermar3_tf_ipc/Home/pantalla_home.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 

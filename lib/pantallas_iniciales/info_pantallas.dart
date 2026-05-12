@@ -1,43 +1,55 @@
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:flutter/material.dart';
 
-class infopantallas extends StatelessWidget {
-  final Map pObj;
-  const infopantallas({super.key, required this.pObj});
+class InfoPantallas extends StatelessWidget {
+  final Map<String, String> pObj;
+
+  const InfoPantallas({
+    super.key,
+    required this.pObj,
+  });
 
   @override
   Widget build(BuildContext context) {
-    var media = MediaQuery.of(context).size;
-    return SizedBox(
-      width: media.width,
-      height: media.height,
+    final media = MediaQuery.of(context).size;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 25),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Image.asset(
-            pObj["imagen"].toString(),
-            width: media.width,
-            fit: BoxFit.fitWidth,
-          ),
-          SizedBox(
-            height: media.width * 0.1,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            child: Text(
-              pObj["titulo"].toString(),
-              style: TextStyle(
-                  color: TColor.negro,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700),
+          const SizedBox(height: 55),
+
+          Center(
+            child: Image.asset(
+              pObj["imagen"] ?? "",
+              width: media.width * 0.9,
+              height: media.height * 0.43,
+              fit: BoxFit.contain,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            child: Text(
-              pObj["info"].toString(),
-              style: TextStyle(color: TColor.gris, fontSize: 14),
+
+          const SizedBox(height: 35),
+
+          Text(
+            pObj["titulo"] ?? "",
+            style: TextStyle(
+              color: TColor.negro,
+              fontSize: 31,
+              fontWeight: FontWeight.w800,
+              height: 1.15,
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          Text(
+            pObj["info"] ?? "",
+            style: TextStyle(
+              color: TColor.gris,
+              fontSize: 16,
+              height: 1.55,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ],
