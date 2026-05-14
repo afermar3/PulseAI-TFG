@@ -11,77 +11,156 @@ class NotificationView extends StatefulWidget {
 }
 
 class _NotificationViewState extends State<NotificationView> {
-  List notificationArr = [
-    {"image": "assets/img/Workout1.png", "title": "Hey, it’s time for lunch", "time": "About 1 minutes ago"},
-    {"image": "assets/img/Workout2.png", "title": "Don’t miss your lowerbody workout", "time": "About 3 hours ago"},
-    {"image": "assets/img/Workout3.png", "title": "Hey, let’s add some meals for your b", "time": "About 3 hours ago"},
-    {"image": "assets/img/Workout1.png", "title": "Congratulations, You have finished A..", "time": "29 May"},
-    {"image": "assets/img/Workout2.png", "title": "Hey, it’s time for lunch", "time": "8 April"},
-    {"image": "assets/img/Workout3.png", "title": "Ups, You have missed your Lowerbo...", "time": "8 April"},
+  final List<Map<String, String>> notificationArr = [
+    {
+      "image": "assets/img/Workout1.png",
+      "title": "Hora de comer",
+      "time": "Hace 1 minuto",
+    },
+    {
+      "image": "assets/img/Workout2.png",
+      "title": "No olvides tu entrenamiento de tren inferior",
+      "time": "Hace 3 horas",
+    },
+    {
+      "image": "assets/img/Workout3.png",
+      "title": "Añade tus comidas de hoy",
+      "time": "Hace 3 horas",
+    },
+    {
+      "image": "assets/img/Workout1.png",
+      "title": "¡Felicidades! Has terminado tu entrenamiento",
+      "time": "29 mayo",
+    },
+    {
+      "image": "assets/img/Workout2.png",
+      "title": "Hora de comer",
+      "time": "8 abril",
+    },
+    {
+      "image": "assets/img/Workout3.png",
+      "title": "Has perdido tu entrenamiento programado",
+      "time": "8 abril",
+    },
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: TColor.white,
       appBar: AppBar(
         backgroundColor: TColor.white,
         centerTitle: true,
         elevation: 0,
-        leading: InkWell(
-          onTap: () {
-            Navigator.pop(context);
-          },
-          child: Container(
-            margin: const EdgeInsets.all(8),
-            height: 40,
-            width: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
+        leading: Padding(
+          padding: const EdgeInsets.all(8),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () {
+              Navigator.pop(context);
+            },
+            child: Container(
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
                 color: TColor.lightGray,
-                borderRadius: BorderRadius.circular(10)),
-            child: Image.asset(
-              "assets/img/black_btn.png",
-              width: 15,
-              height: 15,
-              fit: BoxFit.contain,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: TColor.black,
+                size: 18,
+              ),
             ),
           ),
         ),
         title: Text(
-          "Notification",
+          "Notificaciones",
           style: TextStyle(
-              color: TColor.black, fontSize: 16, fontWeight: FontWeight.w700),
+            color: TColor.black,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
         ),
         actions: [
-          InkWell(
-            onTap: () {},
-            child: Container(
-              margin: const EdgeInsets.all(8),
-              height: 40,
-              width: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () {},
+              child: Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
                   color: TColor.lightGray,
-                  borderRadius: BorderRadius.circular(10)),
-              child: Image.asset(
-                "assets/img/more_btn.png",
-                width: 12,
-                height: 12,
-                fit: BoxFit.contain,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.more_horiz_rounded,
+                  color: TColor.black,
+                  size: 22,
+                ),
               ),
             ),
-          )
+          ),
         ],
       ),
-      backgroundColor: TColor.white,
-      body: ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 25),
-        itemBuilder: ((context, index) {
-          var nObj = notificationArr[index] as Map? ?? {};
-          return NotificationRow(nObj: nObj);
-      }), separatorBuilder: (context, index){
-        return Divider(color: TColor.gray.withOpacity(0.5), height: 1, );
-      }, itemCount: notificationArr.length),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          children: [
+            Text(
+              "Hoy",
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+
+            const SizedBox(height: 6),
+
+            Text(
+              "Tienes ${notificationArr.length} notificaciones recientes",
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+
+            const SizedBox(height: 22),
+
+            ListView.separated(
+              padding: EdgeInsets.zero,
+              physics: const NeverScrollableScrollPhysics(),
+              shrinkWrap: true,
+              itemCount: notificationArr.length,
+              itemBuilder: (context, index) {
+                final nObj = notificationArr[index];
+
+                return Container(
+                  decoration: BoxDecoration(
+                    color: TColor.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: NotificationRow(nObj: nObj),
+                );
+              },
+              separatorBuilder: (context, index) {
+                return const SizedBox(height: 12);
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

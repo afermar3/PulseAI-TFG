@@ -49,7 +49,7 @@ class _ObjetivoViewState extends State<objetivo> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (context) => const Menu(),
+        builder: (context) => const MainTabView(),
       ),
     );
   }

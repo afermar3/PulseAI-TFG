@@ -1,5 +1,4 @@
 import 'package:afermar3_tf_ipc/pantallas_iniciales/screen_inicial.dart';
-import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:flutter/material.dart';
 
 void main() {

@@ -1,35 +1,61 @@
-Última actualización: 2 de junio de 2024
+Última actualización: 14 de mayo de 2026
 
-1. Aceptación de los Términos
+Términos de uso y política de privacidad de PulseAI
 
-Al descargar y usar GymFit, aceptas cumplir con estos Términos de Uso ("Términos"). Si no estás de acuerdo con estos Términos, no utilices la Aplicación.
+Al crear una cuenta o utilizar PulseAI, aceptas estos términos de uso y el tratamiento de tus datos según lo indicado a continuación. Si no estás de acuerdo, no deberías utilizar la aplicación.
 
-2. Uso de la Aplicación
+1. Uso de la aplicación
 
-Puedes utilizar la Aplicación solo para fines personales y no comerciales. No debes:
+PulseAI es una aplicación destinada al seguimiento personal de entrenamientos, objetivos físicos, progreso corporal, hábitos saludables y recomendaciones personalizadas.
 
-Modificar, distribuir, transmitir, mostrar, realizar, reproducir, publicar, licenciar, crear trabajos derivados de, transferir o vender cualquier información, software, productos o servicios obtenidos de la Aplicación.
-Usar la Aplicación de manera ilegal o para cualquier propósito que esté prohibido por estos Términos.
-3. Propiedad Intelectual
+La aplicación debe utilizarse únicamente para fines personales. No está permitido utilizar PulseAI para fines ilegales, comerciales no autorizados, modificar su contenido, distribuirlo, copiarlo o usarlo de forma que pueda afectar al correcto funcionamiento de la aplicación.
 
-Todos los derechos, títulos e intereses en y sobre la Aplicación, incluidos los derechos de propiedad intelectual, son propiedad de GymFit o de sus licenciantes.
+2. Datos del usuario
 
-4. Limitación de Responsabilidad
+Para ofrecer una experiencia personalizada, PulseAI puede almacenar datos introducidos por el usuario, como nombre, correo electrónico, edad, altura, peso, objetivo físico, rutinas, actividad, historial, fotos de progreso y preferencias de uso.
 
-La Aplicación se proporciona "tal cual" y "según disponibilidad". No garantizamos que la Aplicación estará libre de errores o ininterrumpida. En la medida máxima permitida por la ley, no seremos responsables por ningún daño indirecto, incidental, especial, consecuente o punitivo, ni por la pérdida de beneficios o ingresos, ya sea incurridos directa o indirectamente.
+Estos datos se utilizarán para mostrar estadísticas, realizar seguimiento del progreso, personalizar entrenamientos y mejorar las recomendaciones dentro de la aplicación.
 
-5. Modificaciones a los Términos
+3. Coach IA y recomendaciones
 
-Podemos modificar estos Términos en cualquier momento. Te notificaremos sobre cualquier cambio publicando los nuevos Términos en esta página. Al continuar usando la Aplicación después de la publicación de los cambios, aceptas estar sujeto a los Términos modificados.
+PulseAI puede incluir funcionalidades de inteligencia artificial para ayudar al usuario con rutinas, dieta, análisis de progreso, objetivos y dudas relacionadas con el entrenamiento.
 
-6. Terminación
+Las recomendaciones generadas por el Coach IA son orientativas y no sustituyen la opinión de un médico, nutricionista, fisioterapeuta o entrenador profesional. El usuario debe actuar con responsabilidad y adaptar cualquier recomendación a su estado físico real.
 
-Podemos suspender o terminar tu acceso a la Aplicación en cualquier momento, sin previo aviso, si violas estos Términos o si decidimos descontinuar la Aplicación.
+4. Cambios en dieta, rutinas u objetivos
 
-7. Ley Aplicable
+Si el usuario solicita modificar su dieta, rutina, objetivos o datos personales mediante el Coach IA, la aplicación podrá generar una propuesta de cambio. Los cambios importantes deberán ser revisados y aceptados por el usuario antes de aplicarse.
 
-Estos Términos se regirán e interpretarán de acuerdo con las leyes de España, sin tener en cuenta sus disposiciones sobre conflictos de leyes.
+5. Fotos de progreso
 
-8. Contacto
+Las fotos subidas por el usuario se utilizarán para mostrar su evolución física dentro de la aplicación. El usuario es responsable de las imágenes que sube y debe evitar subir contenido inapropiado o imágenes de terceros sin permiso.
 
-Si tienes preguntas sobre estos Términos, contáctanos en tugimnasiogymfit@gmail.com.
+6. Propiedad intelectual
+
+Todos los derechos sobre la aplicación, incluyendo diseño, código, textos, imágenes, funcionalidades y marca, pertenecen a PulseAI o a sus respectivos titulares. No está permitido copiar, modificar, distribuir o explotar el contenido de la aplicación sin autorización.
+
+7. Limitación de responsabilidad
+
+PulseAI se ofrece como una herramienta de apoyo y seguimiento. No garantizamos que la aplicación esté siempre libre de errores o interrupciones.
+
+En la medida permitida por la ley, PulseAI no será responsable de daños derivados del uso incorrecto de la aplicación, de la interpretación de recomendaciones o de decisiones tomadas por el usuario sin consultar a un profesional cuando sea necesario.
+
+8. Modificaciones de los términos
+
+Podemos actualizar estos términos en futuras versiones de la aplicación para adaptarlos a nuevas funcionalidades, cambios técnicos o requisitos legales. El uso continuado de la aplicación tras una actualización implica la aceptación de los nuevos términos.
+
+9. Suspensión o finalización del acceso
+
+PulseAI podrá suspender o limitar el acceso a la aplicación si se detecta un uso indebido, incumplimiento de estos términos o cualquier comportamiento que afecte negativamente a la seguridad o funcionamiento del servicio.
+
+10. Ley aplicable
+
+Estos términos se regirán e interpretarán de acuerdo con la legislación española.
+
+11. Contacto
+
+Si tienes preguntas sobre estos términos, privacidad o uso de la aplicación, puedes contactar con nosotros en:
+
+soporte@pulseai.es
+
+Al aceptar estos términos, confirmas que has leído y comprendido esta información y aceptas utilizar PulseAI de forma responsable.

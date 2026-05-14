@@ -3,6 +3,7 @@ import 'package:afermar3_tf_ipc/funcionalidad/menu_principal.dart';
 import 'package:afermar3_tf_ipc/funcionalidad/objetivo.dart';
 import 'package:afermar3_tf_ipc/home/pantalla_home.dart';
 import 'package:afermar3_tf_ipc/info_user/sign_up_view.dart';
+import 'package:afermar3_tf_ipc/main_tab/main_tab_view.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/widgets/boton.dart';
 import 'package:afermar3_tf_ipc/widgets/campostexto.dart';
@@ -112,7 +113,7 @@ class _LoginView extends State<Login> {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const objetivo(),
+                            builder: (context) => const MainTabView(),
                           ),
                         );
                       } else {
