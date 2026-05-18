@@ -3,10 +3,6 @@ import 'package:afermar3_tf_ipc/workout_tracker/workout_detail_view.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-import '../../common_widget/round_button.dart';
-import '../../common_widget/upcoming_workout_row.dart';
-import '../../common_widget/what_train_row.dart';
-
 class WorkoutTrackerView extends StatefulWidget {
   const WorkoutTrackerView({super.key});
 
@@ -15,490 +11,917 @@ class WorkoutTrackerView extends StatefulWidget {
 }
 
 class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
-  List latestArr = [
+  final List<Map<String, dynamic>> scheduledWorkouts = [
     {
+      "id": 1,
       "image": "assets/img/Workout1.png",
-      "title": "Fullbody Workout",
-      "time": "Today, 03:00pm"
+      "title": "Full Body",
+      "subtitle": "Fuerza y resistencia",
+      "time": "Hoy, 15:00",
+      "duration": "32 min",
+      "exercises": "11 ejercicios",
+      "kcal": "280 kcal",
+      "enabled": true,
     },
     {
+      "id": 2,
       "image": "assets/img/Workout2.png",
-      "title": "Upperbody Workout",
-      "time": "June 05, 02:00pm"
+      "title": "Tren superior",
+      "subtitle": "Espalda, pecho y brazos",
+      "time": "Mañana, 18:30",
+      "duration": "40 min",
+      "exercises": "12 ejercicios",
+      "kcal": "330 kcal",
+      "enabled": true,
     },
   ];
 
-  List whatArr = [
+  final List<Map<String, dynamic>> workoutPlans = [
     {
+      "id": 101,
       "image": "assets/img/what_1.png",
-      "title": "Fullbody Workout",
-      "exercises": "11 Exercises",
-      "time": "32mins"
+      "title": "Full Body",
+      "subtitle": "Entrenamiento completo",
+      "exercises": "11 ejercicios",
+      "time": "32 min",
+      "level": "Medio",
+      "kcal": "280 kcal",
+      "progress": 0.68,
     },
     {
+      "id": 102,
       "image": "assets/img/what_2.png",
-      "title": "Lowebody Workout",
-      "exercises": "12 Exercises",
-      "time": "40mins"
+      "title": "Tren inferior",
+      "subtitle": "Piernas y glúteos",
+      "exercises": "12 ejercicios",
+      "time": "40 min",
+      "level": "Intenso",
+      "kcal": "360 kcal",
+      "progress": 0.45,
     },
     {
+      "id": 103,
       "image": "assets/img/what_3.png",
-      "title": "AB Workout",
-      "exercises": "14 Exercises",
-      "time": "20mins"
-    }
+      "title": "Abdominales",
+      "subtitle": "Core y estabilidad",
+      "exercises": "14 ejercicios",
+      "time": "20 min",
+      "level": "Básico",
+      "kcal": "180 kcal",
+      "progress": 0.82,
+    },
+  ];
+
+  int selectedFilter = 0;
+
+  final List<String> filters = [
+    "Todos",
+    "Fuerza",
+    "Cardio",
+    "Core",
   ];
 
   @override
   Widget build(BuildContext context) {
-    var media = MediaQuery.of(context).size;
-    return Container(
-      decoration:
-          BoxDecoration(gradient: LinearGradient(colors: TColor.primaryG)),
-      child: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            SliverAppBar(
-              backgroundColor: Colors.transparent,
-              centerTitle: true,
-              elevation: 0,
-              // pinned: true,
-              leading: InkWell(
-                onTap: () {
-                  Navigator.pop(context);
-                },
-                child: Container(
-                  margin: const EdgeInsets.all(8),
-                  height: 40,
-                  width: 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                      color: TColor.lightGray,
-                      borderRadius: BorderRadius.circular(10)),
-                  child: Image.asset(
-                    "assets/img/black_btn.png",
-                    width: 15,
-                    height: 15,
-                    fit: BoxFit.contain,
-                  ),
-                ),
+    final media = MediaQuery.of(context).size;
+    final canPop = Navigator.canPop(context);
+
+    return Scaffold(
+      backgroundColor: TColor.white,
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: media.width * 0.72,
+            pinned: true,
+            elevation: 0,
+            backgroundColor: TColor.primaryColor1,
+            leading: canPop
+                ? Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () {
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  )
+                : null,
+            title: const Text(
+              "Entrenamientos",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 19,
+                fontWeight: FontWeight.w800,
               ),
-              title: Text(
-                "Workout Tracker",
-                style: TextStyle(
-                    color: TColor.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700),
-              ),
-              actions: [
-                InkWell(
-                  onTap: () {},
+            ),
+            centerTitle: true,
+            actions: [
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () {
+                    // TODO: abrir filtros, calendario o ajustes cuando conectemos backend
+                  },
                   child: Container(
-                    margin: const EdgeInsets.all(8),
-                    height: 40,
-                    width: 40,
+                    width: 42,
+                    height: 42,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                        color: TColor.lightGray,
-                        borderRadius: BorderRadius.circular(10)),
-                    child: Image.asset(
-                      "assets/img/more_btn.png",
-                      width: 15,
-                      height: 15,
-                      fit: BoxFit.contain,
+                      color: Colors.white.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(14),
                     ),
-                  ),
-                )
-              ],
-            ),
-            SliverAppBar(
-              backgroundColor: Colors.transparent,
-              centerTitle: true,
-              elevation: 0,
-              leadingWidth: 0,
-              leading: const SizedBox(),
-              expandedHeight: media.width * 0.5,
-              flexibleSpace: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                height: media.width * 0.5,
-                width: double.maxFinite,
-                child: LineChart(
-                  LineChartData(
-                    lineTouchData: LineTouchData(
-                      enabled: true,
-                      handleBuiltInTouches: false,
-                      touchCallback:
-                          (FlTouchEvent event, LineTouchResponse? response) {
-                        if (response == null || response.lineBarSpots == null) {
-                          return;
-                        }
-                        // if (event is FlTapUpEvent) {
-                        //   final spotIndex =
-                        //       response.lineBarSpots!.first.spotIndex;
-                        //   showingTooltipOnSpots.clear();
-                        //   setState(() {
-                        //     showingTooltipOnSpots.add(spotIndex);
-                        //   });
-                        // }
-                      },
-                      mouseCursorResolver:
-                          (FlTouchEvent event, LineTouchResponse? response) {
-                        if (response == null || response.lineBarSpots == null) {
-                          return SystemMouseCursors.basic;
-                        }
-                        return SystemMouseCursors.click;
-                      },
-                      getTouchedSpotIndicator:
-                          (LineChartBarData barData, List<int> spotIndexes) {
-                        return spotIndexes.map((index) {
-                          return TouchedSpotIndicatorData(
-                            FlLine(
-                              color: Colors.transparent,
-                            ),
-                            FlDotData(
-                              show: true,
-                              getDotPainter: (spot, percent, barData, index) =>
-                                  FlDotCirclePainter(
-                                radius: 3,
-                                color: Colors.white,
-                                strokeWidth: 3,
-                                strokeColor: TColor.secondaryColor1,
-                              ),
-                            ),
-                          );
-                        }).toList();
-                      },
-                      touchTooltipData: LineTouchTooltipData(
-                        getTooltipColor: (touchedSpot) =>
-                            TColor.secondaryColor1,
-                        tooltipBorderRadius: BorderRadius.circular(20),
-                        getTooltipItems: (List<LineBarSpot> lineBarsSpot) {
-                          return lineBarsSpot.map((lineBarSpot) {
-                            return LineTooltipItem(
-                              "${lineBarSpot.x.toInt()} mins ago",
-                              const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            );
-                          }).toList();
-                        },
-                      ),
-                    ),
-                    lineBarsData: lineBarsData1,
-                    minY: -0.5,
-                    maxY: 110,
-                    titlesData: FlTitlesData(
-                        show: true,
-                        leftTitles: AxisTitles(),
-                        topTitles: AxisTitles(),
-                        bottomTitles: AxisTitles(
-                          sideTitles: bottomTitles,
-                        ),
-                        rightTitles: AxisTitles(
-                          sideTitles: rightTitles,
-                        )),
-                    gridData: FlGridData(
-                      show: true,
-                      drawHorizontalLine: true,
-                      horizontalInterval: 25,
-                      drawVerticalLine: false,
-                      getDrawingHorizontalLine: (value) {
-                        return FlLine(
-                          color: TColor.white.withOpacity(0.15),
-                          strokeWidth: 2,
-                        );
-                      },
-                    ),
-                    borderData: FlBorderData(
-                      show: true,
-                      border: Border.all(
-                        color: Colors.transparent,
-                      ),
+                    child: const Icon(
+                      Icons.more_horiz_rounded,
+                      color: Colors.white,
+                      size: 22,
                     ),
                   ),
                 ),
               ),
-            ),
-          ];
-        },
-        body: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          decoration: BoxDecoration(
-              color: TColor.white,
-              borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(25), topRight: Radius.circular(25))),
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            body: SingleChildScrollView(
-              child: Column(
-                children: [
-                  const SizedBox(
-                    height: 10,
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: TColor.primaryG,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  Container(
-                    width: 50,
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: TColor.gray.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(3)),
-                  ),
-                  SizedBox(
-                    height: media.width * 0.05,
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        vertical: 15, horizontal: 15),
-                    decoration: BoxDecoration(
-                      color: TColor.primaryColor2.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 70, 22, 22),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        const SizedBox(height: 12),
                         Text(
-                          "Daily Workout Schedule",
+                          "Tu progreso semanal",
                           style: TextStyle(
-                              color: TColor.black,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700),
-                        ),
-                        SizedBox(
-                          width: 70,
-                          height: 25,
-                          child: RoundButton(
-                            title: "Check",
-                            type: RoundButtonType.bgGradient,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            onPressed: () {
-                              // Navigator.push(
-                              //   context,
-                              //   MaterialPageRoute(
-                              //     builder: (context) =>
-                              //         const ActivityTrackerView(),
-                              //   ),
-                              // );
-                            },
+                            color: TColor.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
                           ),
-                        )
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "4 entrenamientos completados · 1.150 kcal",
+                          style: TextStyle(
+                            color: TColor.white.withOpacity(0.78),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Expanded(
+                          child: _WeeklyChart(),
+                        ),
                       ],
                     ),
                   ),
-                  SizedBox(
-                    height: media.width * 0.05,
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "Upcoming Workout",
-                        style: TextStyle(
-                            color: TColor.black,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700),
-                      ),
-                      TextButton(
-                        onPressed: () {},
-                        child: Text(
-                          "See More",
-                          style: TextStyle(
-                              color: TColor.gray,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700),
-                        ),
-                      )
-                    ],
-                  ),
-                  ListView.builder(
-                      padding: EdgeInsets.zero,
-                      physics: const NeverScrollableScrollPhysics(),
-                      shrinkWrap: true,
-                      itemCount: latestArr.length,
-                      itemBuilder: (context, index) {
-                        var wObj = latestArr[index] as Map? ?? {};
-                        return UpcomingWorkoutRow(wObj: wObj);
-                      }),
-                  SizedBox(
-                    height: media.width * 0.05,
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "What Do You Want to Train",
-                        style: TextStyle(
-                            color: TColor.black,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                  ListView.builder(
-                      padding: EdgeInsets.zero,
-                      physics: const NeverScrollableScrollPhysics(),
-                      shrinkWrap: true,
-                      itemCount: whatArr.length,
-                      itemBuilder: (context, index) {
-                        var wObj = whatArr[index] as Map? ?? {};
-                        return InkWell(
-                            onTap: () {
-                              Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (context) => WorkoutDetailView(
-                                            dObj: wObj,
-                                          )));
-                            },
-                            child: WhatTrainRow(wObj: wObj));
-                      }),
-                  SizedBox(
-                    height: media.width * 0.1,
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+          SliverToBoxAdapter(
+            child: Container(
+              decoration: BoxDecoration(
+                color: TColor.white,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(28),
+                  topRight: Radius.circular(28),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 150),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 50,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: TColor.gray.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    _buildSummaryCards(),
+                    const SizedBox(height: 22),
+                    _buildDailyScheduleCard(),
+                    const SizedBox(height: 26),
+                    _buildSectionHeader(
+                      title: "Próximos entrenamientos",
+                      actionText: "Ver todos",
+                      onTap: () {
+                        // TODO: pantalla calendario / lista completa desde backend
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    ListView.builder(
+                      padding: EdgeInsets.zero,
+                      physics: const NeverScrollableScrollPhysics(),
+                      shrinkWrap: true,
+                      itemCount: scheduledWorkouts.length,
+                      itemBuilder: (context, index) {
+                        final workout = scheduledWorkouts[index];
+
+                        return _ScheduledWorkoutCard(
+                          workout: workout,
+                          onChanged: (value) {
+                            setState(() {
+                              workout["enabled"] = value;
+                            });
+
+                            // TODO backend:
+                            // PATCH /scheduled-workouts/{id}
+                            // body: { enabled: value }
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    _buildSectionHeader(
+                      title: "¿Qué quieres entrenar?",
+                      actionText: "IA",
+                      onTap: () {
+                        // TODO: abrir Coach IA con contexto de entrenamiento
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _buildFilterChips(),
+                    const SizedBox(height: 16),
+                    ListView.builder(
+                      padding: EdgeInsets.zero,
+                      physics: const NeverScrollableScrollPhysics(),
+                      shrinkWrap: true,
+                      itemCount: workoutPlans.length,
+                      itemBuilder: (context, index) {
+                        final workout = workoutPlans[index];
+
+                        return _WorkoutPlanCard(
+                          workout: workout,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => WorkoutDetailView(
+                                  dObj: workout,
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  LineTouchData get lineTouchData1 => LineTouchData(
-        handleBuiltInTouches: true,
-        touchTooltipData: LineTouchTooltipData(
-          getTooltipColor: (touchedSpot) => Colors.blueGrey.withOpacity(0.8),
+  Widget _buildSummaryCards() {
+    return Row(
+      children: [
+        Expanded(
+          child: _SummaryCard(
+            icon: Icons.fitness_center_rounded,
+            value: "4",
+            label: "Sesiones",
+          ),
         ),
-      );
-
-  List<LineChartBarData> get lineBarsData1 => [
-        lineChartBarData1_1,
-        lineChartBarData1_2,
-      ];
-
-  LineChartBarData get lineChartBarData1_1 => LineChartBarData(
-        isCurved: true,
-        color: TColor.white,
-        barWidth: 4,
-        isStrokeCapRound: true,
-        dotData: FlDotData(show: false),
-        belowBarData: BarAreaData(show: false),
-        spots: const [
-          FlSpot(1, 35),
-          FlSpot(2, 70),
-          FlSpot(3, 40),
-          FlSpot(4, 80),
-          FlSpot(5, 25),
-          FlSpot(6, 70),
-          FlSpot(7, 35),
-        ],
-      );
-
-  LineChartBarData get lineChartBarData1_2 => LineChartBarData(
-        isCurved: true,
-        color: TColor.white.withOpacity(0.5),
-        barWidth: 2,
-        isStrokeCapRound: true,
-        dotData: FlDotData(show: false),
-        belowBarData: BarAreaData(
-          show: false,
+        const SizedBox(width: 12),
+        Expanded(
+          child: _SummaryCard(
+            icon: Icons.local_fire_department_rounded,
+            value: "1150",
+            label: "Kcal",
+          ),
         ),
-        spots: const [
-          FlSpot(1, 80),
-          FlSpot(2, 50),
-          FlSpot(3, 90),
-          FlSpot(4, 40),
-          FlSpot(5, 80),
-          FlSpot(6, 35),
-          FlSpot(7, 60),
-        ],
-      );
-
-  SideTitles get rightTitles => SideTitles(
-        getTitlesWidget: rightTitleWidgets,
-        showTitles: true,
-        interval: 20,
-        reservedSize: 40,
-      );
-
-  Widget rightTitleWidgets(double value, TitleMeta meta) {
-    String text;
-    switch (value.toInt()) {
-      case 0:
-        text = '0%';
-        break;
-      case 20:
-        text = '20%';
-        break;
-      case 40:
-        text = '40%';
-        break;
-      case 60:
-        text = '60%';
-        break;
-      case 80:
-        text = '80%';
-        break;
-      case 100:
-        text = '100%';
-        break;
-      default:
-        return Container();
-    }
-
-    return Text(text,
-        style: TextStyle(
-          color: TColor.white,
-          fontSize: 12,
+        const SizedBox(width: 12),
+        Expanded(
+          child: _SummaryCard(
+            icon: Icons.timer_outlined,
+            value: "132",
+            label: "Min",
+          ),
         ),
-        textAlign: TextAlign.center);
+      ],
+    );
   }
 
-  SideTitles get bottomTitles => SideTitles(
-        showTitles: true,
-        reservedSize: 32,
-        interval: 1,
-        getTitlesWidget: bottomTitleWidgets,
-      );
-
-  Widget bottomTitleWidgets(double value, TitleMeta meta) {
-    var style = TextStyle(
-      color: TColor.white,
-      fontSize: 12,
+  Widget _buildDailyScheduleCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            TColor.primaryColor2.withOpacity(0.22),
+            TColor.primaryColor1.withOpacity(0.10),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: TColor.primaryColor1.withOpacity(0.10),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: TColor.white,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(
+              Icons.calendar_month_rounded,
+              color: TColor.primaryColor1,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Plan de hoy",
+                  style: TextStyle(
+                    color: TColor.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Tienes 1 entrenamiento programado",
+                  style: TextStyle(
+                    color: TColor.gray,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 36,
+            child: ElevatedButton(
+              onPressed: () {
+                // TODO: abrir calendario / detalle del plan diario
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TColor.primaryColor1,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+              child: const Text(
+                "Ver",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
-    Widget text;
-    switch (value.toInt()) {
-      case 1:
-        text = Text('Sun', style: style);
-        break;
-      case 2:
-        text = Text('Mon', style: style);
-        break;
-      case 3:
-        text = Text('Tue', style: style);
-        break;
-      case 4:
-        text = Text('Wed', style: style);
-        break;
-      case 5:
-        text = Text('Thu', style: style);
-        break;
-      case 6:
-        text = Text('Fri', style: style);
-        break;
-      case 7:
-        text = Text('Sat', style: style);
-        break;
-      default:
-        text = const Text('');
-        break;
-    }
+  }
 
-    return SideTitleWidget(
-      meta: meta,
-      space: 10,
-      child: text,
+  Widget _buildSectionHeader({
+    required String title,
+    required String actionText,
+    required VoidCallback onTap,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              color: TColor.black,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        TextButton(
+          onPressed: onTap,
+          child: Text(
+            actionText,
+            style: TextStyle(
+              color: TColor.primaryColor1,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChips() {
+    return SizedBox(
+      height: 38,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: filters.length,
+        itemBuilder: (context, index) {
+          final isSelected = selectedFilter == index;
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () {
+                setState(() {
+                  selectedFilter = index;
+                });
+
+                // TODO backend:
+                // GET /workouts?category=filters[index]
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color:
+                      isSelected ? TColor.primaryColor1 : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  filters[index],
+                  style: TextStyle(
+                    color: isSelected ? TColor.white : TColor.gray,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _WeeklyChart extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return LineChart(
+      LineChartData(
+        minY: 0,
+        maxY: 100,
+        lineTouchData: LineTouchData(
+          enabled: true,
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (spot) => Colors.black.withOpacity(0.75),
+            tooltipBorderRadius: BorderRadius.circular(14),
+            getTooltipItems: (spots) {
+              return spots.map((spot) {
+                return LineTooltipItem(
+                  "${spot.y.toInt()}%",
+                  const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              }).toList();
+            },
+          ),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: false,
+            ),
+          ),
+          topTitles: AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              interval: 1,
+              getTitlesWidget: (value, meta) {
+                final style = TextStyle(
+                  color: TColor.white.withOpacity(0.85),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                );
+
+                String text = "";
+
+                switch (value.toInt()) {
+                  case 1:
+                    text = "L";
+                    break;
+                  case 2:
+                    text = "M";
+                    break;
+                  case 3:
+                    text = "X";
+                    break;
+                  case 4:
+                    text = "J";
+                    break;
+                  case 5:
+                    text = "V";
+                    break;
+                  case 6:
+                    text = "S";
+                    break;
+                  case 7:
+                    text = "D";
+                    break;
+                }
+
+                return SideTitleWidget(
+                  meta: meta,
+                  space: 8,
+                  child: Text(text, style: style),
+                );
+              },
+            ),
+          ),
+        ),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: 25,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(
+              color: TColor.white.withOpacity(0.14),
+              strokeWidth: 1.5,
+            );
+          },
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            isCurved: true,
+            color: TColor.white,
+            barWidth: 4,
+            isStrokeCapRound: true,
+            dotData: FlDotData(show: false),
+            belowBarData: BarAreaData(
+              show: true,
+              color: TColor.white.withOpacity(0.12),
+            ),
+            spots: const [
+              FlSpot(1, 30),
+              FlSpot(2, 55),
+              FlSpot(3, 42),
+              FlSpot(4, 70),
+              FlSpot(5, 58),
+              FlSpot(6, 85),
+              FlSpot(7, 72),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+
+  const _SummaryCard({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 104,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: TColor.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.grey.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.045),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: TColor.primaryColor1,
+              size: 24,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScheduledWorkoutCard extends StatelessWidget {
+  final Map<String, dynamic> workout;
+  final Function(bool value) onChanged;
+
+  const _ScheduledWorkoutCard({
+    required this.workout,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = workout["enabled"] as bool? ?? false;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: TColor.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Image.asset(
+              workout["image"].toString(),
+              width: 58,
+              height: 58,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  width: 58,
+                  height: 58,
+                  color: Colors.grey.shade100,
+                  child: Icon(
+                    Icons.fitness_center_rounded,
+                    color: TColor.primaryColor1,
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  workout["title"].toString(),
+                  style: TextStyle(
+                    color: TColor.black,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  workout["time"].toString(),
+                  style: TextStyle(
+                    color: TColor.gray,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  "${workout["duration"]} · ${workout["kcal"]}",
+                  style: TextStyle(
+                    color: TColor.primaryColor1,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: enabled,
+            activeColor: TColor.primaryColor1,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkoutPlanCard extends StatelessWidget {
+  final Map<String, dynamic> workout;
+  final VoidCallback onTap;
+
+  const _WorkoutPlanCard({
+    required this.workout,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = workout["progress"] as double? ?? 0.0;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(26),
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: TColor.white,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(
+            color: Colors.grey.shade100,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.045),
+              blurRadius: 14,
+              offset: const Offset(0, 7),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: Image.asset(
+                workout["image"].toString(),
+                width: 82,
+                height: 82,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    width: 82,
+                    height: 82,
+                    color: Colors.grey.shade100,
+                    child: Icon(
+                      Icons.fitness_center_rounded,
+                      color: TColor.primaryColor1,
+                      size: 30,
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    workout["title"].toString(),
+                    style: TextStyle(
+                      color: TColor.black,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    workout["subtitle"].toString(),
+                    style: TextStyle(
+                      color: TColor.gray,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _MiniTag(text: workout["exercises"].toString()),
+                      _MiniTag(text: workout["time"].toString()),
+                      _MiniTag(text: workout["level"].toString()),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 6,
+                      backgroundColor: Colors.grey.shade100,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        TColor.primaryColor1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: TColor.gray,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniTag extends StatelessWidget {
+  final String text;
+
+  const _MiniTag({
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: TColor.primaryColor1.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: TColor.primaryColor1,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }

@@ -1,280 +1,686 @@
+import 'package:afermar3_tf_ipc/common_widget/round_button.dart';
+import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:readmore/readmore.dart';
 
-import '../../widgets/color_extension.dart';
-import '../../common_widget/round_button.dart';
-import '../../common_widget/step_detail_row.dart';
-
 class ExercisesStepDetails extends StatefulWidget {
   final Map eObj;
-  const ExercisesStepDetails({super.key, required this.eObj});
+
+  const ExercisesStepDetails({
+    super.key,
+    required this.eObj,
+  });
 
   @override
   State<ExercisesStepDetails> createState() => _ExercisesStepDetailsState();
 }
 
 class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
-  List stepArr = [
+  int selectedRepetitions = 12;
+
+  final List<Map<String, dynamic>> stepArr = [
     {
       "no": "01",
-      "title": "Spread Your Arms",
+      "title": "Coloca bien la postura",
       "detail":
-          "To make the gestures feel more relaxed, stretch your arms as you start this movement. No bending of hands."
+          "Mantén la espalda recta, activa el abdomen y separa ligeramente los pies para tener estabilidad durante el movimiento.",
     },
     {
       "no": "02",
-      "title": "Rest at The Toe",
+      "title": "Controla el movimiento",
       "detail":
-          "The basis of this movement is jumping. Now, what needs to be considered is that you have to use the tips of your feet"
+          "Realiza el ejercicio de forma progresiva, sin tirones bruscos. Prioriza siempre la técnica antes que la velocidad.",
     },
     {
       "no": "03",
-      "title": "Adjust Foot Movement",
+      "title": "Mantén la respiración",
       "detail":
-          "Jumping Jack is not just an ordinary jump. But, you also have to pay close attention to leg movements."
+          "Inhala antes de iniciar el esfuerzo y exhala durante la fase principal del movimiento para mantener el control.",
     },
     {
       "no": "04",
-      "title": "Clapping Both Hands",
+      "title": "Vuelve a la posición inicial",
       "detail":
-          "This cannot be taken lightly. You see, without realizing it, the clapping of your hands helps you to keep your rhythm while doing the Jumping Jack"
+          "Regresa lentamente a la posición inicial, evitando perder la postura. Descansa unos segundos si lo necesitas.",
     },
   ];
 
   @override
   Widget build(BuildContext context) {
-    var media = MediaQuery.of(context).size;
+    final media = MediaQuery.of(context).size;
+
+    final String title = widget.eObj["title"]?.toString() ?? "Ejercicio";
+    final String value = widget.eObj["value"]?.toString() ?? "12x";
+    final String type = widget.eObj["type"]?.toString() ?? "reps";
+    final String image =
+        widget.eObj["image"]?.toString() ?? "assets/img/video_temp.png";
+
+    final String description = widget.eObj["description"]?.toString() ??
+        "Este ejercicio ayuda a mejorar la resistencia, la coordinación y el control corporal. Realízalo manteniendo una técnica correcta y adaptando la intensidad a tu nivel físico.";
+
     return Scaffold(
+      backgroundColor: TColor.white,
       appBar: AppBar(
         backgroundColor: TColor.white,
         centerTitle: true,
         elevation: 0,
-        leading: InkWell(
-          onTap: () {
-            Navigator.pop(context);
-          },
-          child: Container(
-            margin: const EdgeInsets.all(8),
-            height: 40,
-            width: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
+        leading: Padding(
+          padding: const EdgeInsets.all(8),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () {
+              Navigator.pop(context);
+            },
+            child: Container(
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
                 color: TColor.lightGray,
-                borderRadius: BorderRadius.circular(10)),
-            child: Image.asset(
-              "assets/img/closed_btn.png",
-              width: 15,
-              height: 15,
-              fit: BoxFit.contain,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: TColor.black,
+                size: 18,
+              ),
             ),
           ),
         ),
+        title: Text(
+          "Detalle del ejercicio",
+          style: TextStyle(
+            color: TColor.black,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         actions: [
-          InkWell(
-            onTap: () {},
-            child: Container(
-              margin: const EdgeInsets.all(8),
-              height: 40,
-              width: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () {
+                // TODO: opciones del ejercicio: editar, eliminar, añadir a favoritos...
+              },
+              child: Container(
+                width: 42,
+                height: 42,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
                   color: TColor.lightGray,
-                  borderRadius: BorderRadius.circular(10)),
-              child: Image.asset(
-                "assets/img/more_btn.png",
-                width: 15,
-                height: 15,
-                fit: BoxFit.contain,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.more_horiz_rounded,
+                  color: TColor.black,
+                  size: 22,
+                ),
               ),
             ),
-          )
+          ),
         ],
       ),
-      backgroundColor: TColor.white,
-      body: SingleChildScrollView(
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 25),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: media.width,
-                    height: media.width * 0.43,
-                    decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: TColor.primaryG),
-                        borderRadius: BorderRadius.circular(20)),
-                    child: Image.asset(
-                      "assets/img/video_temp.png",
-                      width: media.width,
-                      height: media.width * 0.43,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                  Container(
-                    width: media.width,
-                    height: media.width * 0.43,
-                    decoration: BoxDecoration(
-                        color: TColor.black.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20)),
-                  ),
-                  IconButton(
-                    onPressed: () {},
-                    icon: Image.asset(
-                      "assets/img/Play.png",
-                      width: 30,
-                      height: 30,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(
-                height: 15,
-              ),
-              Text(
-                widget.eObj["title"].toString(),
-                style: TextStyle(
-                    color: TColor.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(
-                height: 4,
-              ),
-              Text(
-                "Easy | 390 Calories Burn",
-                style: TextStyle(
-                  color: TColor.gray,
-                  fontSize: 12,
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(22, 14, 22, 120),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildVideoCard(media, image),
+                const SizedBox(height: 22),
+                _buildTitleSection(
+                  title: title,
+                  value: value,
+                  type: type,
                 ),
-              ),
-              const SizedBox(
-                height: 15,
-              ),
-              Text(
-                "Descriptions",
-                style: TextStyle(
-                    color: TColor.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(
-                height: 4,
-              ),
-              ReadMoreText(
-                'A jumping jack, also known as a star jump and called a side-straddle hop in the US military, is a physical jumping exercise performed by jumping to a position with the legs spread wide A jumping jack, also known as a star jump and called a side-straddle hop in the US military, is a physical jumping exercise performed by jumping to a position with the legs spread wide',
-                trimLines: 4,
-                colorClickableText: TColor.black,
-                trimMode: TrimMode.Line,
-                trimCollapsedText: ' Read More ...',
-                trimExpandedText: ' Read Less',
-                style: TextStyle(
-                  color: TColor.gray,
-                  fontSize: 12,
+                const SizedBox(height: 20),
+                _buildStatsRow(
+                  type: type,
+                  value: value,
                 ),
-                moreStyle:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(
-                height: 15,
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "How To Do It",
-                    style: TextStyle(
-                        color: TColor.black,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700),
+                const SizedBox(height: 26),
+                _buildSectionHeader(
+                  title: "Descripción",
+                  actionText: "",
+                ),
+                const SizedBox(height: 8),
+                ReadMoreText(
+                  description,
+                  trimLines: 4,
+                  colorClickableText: TColor.rojo,
+                  trimMode: TrimMode.Line,
+                  trimCollapsedText: ' Leer más',
+                  trimExpandedText: ' Leer menos',
+                  style: TextStyle(
+                    color: TColor.gray,
+                    fontSize: 13,
+                    height: 1.45,
+                    fontWeight: FontWeight.w500,
                   ),
-                  TextButton(
-                    onPressed: () {},
-                    child: Text(
-                      "${stepArr.length} Sets",
-                      style: TextStyle(color: TColor.gray, fontSize: 12),
-                    ),
-                  )
-                ],
-              ),
-              ListView.builder(
-                physics: const NeverScrollableScrollPhysics(),
-                shrinkWrap: true,
-                itemCount: stepArr.length,
-                itemBuilder: ((context, index) {
-                  var sObj = stepArr[index] as Map? ?? {};
-
-                  return StepDetailRow(
-                    sObj: sObj,
-                    isLast: stepArr.last == sObj,
-                  );
-                }),
-              ),
-              Text(
-                "Custom Repetitions",
-                style: TextStyle(
-                    color: TColor.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700),
-              ),
-              SizedBox(
-                height: 150,
-                child: CupertinoPicker.builder(
-                  itemExtent: 40,
-                  selectionOverlay: Container(
-                    width: double.maxFinite,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(color: TColor.gray.withOpacity(0.2), width: 1),
-                        bottom: BorderSide(
-                            color: TColor.gray.withOpacity(0.2), width: 1),
-                      ),
-                    ),
+                  moreStyle: TextStyle(
+                    color: TColor.rojo,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
                   ),
-                  onSelectedItemChanged: (index) {},
-                  childCount: 60,
+                  lessStyle: TextStyle(
+                    color: TColor.rojo,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                _buildSectionHeader(
+                  title: "Cómo hacerlo",
+                  actionText: "${stepArr.length} pasos",
+                ),
+                const SizedBox(height: 12),
+                ListView.builder(
+                  padding: EdgeInsets.zero,
+                  physics: const NeverScrollableScrollPhysics(),
+                  shrinkWrap: true,
+                  itemCount: stepArr.length,
                   itemBuilder: (context, index) {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          "assets/img/burn.png",
-                          width: 15,
-                          height: 15,
-                          fit: BoxFit.contain,
-                        ),
-                        Text(
-                          " ${(index + 1) * 15} Calories Burn",
-                          style: TextStyle(color: TColor.gray, fontSize: 10),
-                        ),
-                        Text(
-                          " ${index + 1} ",
-                          style: TextStyle(
-                              color: TColor.gray,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w500),
-                        ),
-                        Text(
-                          " times",
-                          style: TextStyle(color: TColor.gray, fontSize: 16),
-                        )
-                      ],
+                    final step = stepArr[index];
+
+                    return _StepCard(
+                      step: step,
+                      isLast: index == stepArr.length - 1,
                     );
                   },
                 ),
+                const SizedBox(height: 26),
+                _buildSectionHeader(
+                  title: type == "time"
+                      ? "Duración personalizada"
+                      : "Repeticiones personalizadas",
+                  actionText: "",
+                ),
+                const SizedBox(height: 12),
+                _buildPicker(type),
+                const SizedBox(height: 20),
+                _buildAdviceCard(),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 22,
+            right: 22,
+            bottom: 18,
+            child: SafeArea(
+              top: false,
+              child: RoundButton(
+                title: "Guardar configuración",
+                elevation: 0,
+                onPressed: () {
+                  // TODO backend:
+                  // PATCH /exercise-settings/{exerciseId}
+                  // body: { repetitions: selectedRepetitions }
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        type == "time"
+                            ? "Duración guardada correctamente"
+                            : "Repeticiones guardadas correctamente",
+                      ),
+                      backgroundColor: TColor.rojo,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
               ),
-              RoundButton(title: "Save", elevation: 0, onPressed: () {}),
-              const SizedBox(
-                height: 15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVideoCard(Size media, String image) {
+    return Container(
+      width: double.infinity,
+      height: media.width * 0.48,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: TColor.primaryG,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: TColor.primaryColor1.withOpacity(0.20),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(26),
+            child: Image.asset(
+              image,
+              width: double.infinity,
+              height: double.infinity,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return Image.asset(
+                  "assets/img/video_temp.png",
+                  width: double.infinity,
+                  height: double.infinity,
+                  fit: BoxFit.contain,
+                );
+              },
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(26),
+            ),
+          ),
+          InkWell(
+            borderRadius: BorderRadius.circular(35),
+            onTap: () {
+              // TODO: reproducir vídeo real del ejercicio
+            },
+            child: Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.92),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.play_arrow_rounded,
+                color: TColor.rojo,
+                size: 38,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTitleSection({
+    required String title,
+    required String value,
+    required String type,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: TColor.black,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                type == "time"
+                    ? "Ejercicio por tiempo · $value"
+                    : type == "rest"
+                        ? "Descanso recomendado · $value"
+                        : "Ejercicio por repeticiones · $value",
+                style: TextStyle(
+                  color: TColor.gray,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
         ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: TColor.rojo.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Text(
+            "Básico",
+            style: TextStyle(
+              color: TColor.rojo,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatsRow({
+    required String type,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: _StatCard(
+            icon: type == "time" ? Icons.timer_outlined : Icons.repeat_rounded,
+            value: value,
+            label: type == "time" ? "Duración" : "Reps",
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: _StatCard(
+            icon: Icons.local_fire_department_rounded,
+            value: "45",
+            label: "Kcal",
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: _StatCard(
+            icon: Icons.speed_rounded,
+            value: "Fácil",
+            label: "Nivel",
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader({
+    required String title,
+    required String actionText,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              color: TColor.black,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        if (actionText.isNotEmpty)
+          Text(
+            actionText,
+            style: TextStyle(
+              color: TColor.gray,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPicker(String type) {
+    return Container(
+      height: 160,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
       ),
+      child: CupertinoPicker.builder(
+        itemExtent: 42,
+        selectionOverlay: Container(
+          width: double.infinity,
+          height: 42,
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: TColor.gray.withOpacity(0.18),
+                width: 1,
+              ),
+              bottom: BorderSide(
+                color: TColor.gray.withOpacity(0.18),
+                width: 1,
+              ),
+            ),
+          ),
+        ),
+        onSelectedItemChanged: (index) {
+          setState(() {
+            selectedRepetitions = index + 1;
+          });
+        },
+        childCount: type == "time" ? 30 : 60,
+        itemBuilder: (context, index) {
+          final value = index + 1;
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                type == "time" ? Icons.timer_outlined : Icons.repeat_rounded,
+                color: TColor.rojo,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                type == "time" ? "$value min" : "$value repeticiones",
+                style: TextStyle(
+                  color: TColor.black,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                "· ${(value * 4).clamp(5, 240)} kcal aprox.",
+                style: TextStyle(
+                  color: TColor.gray,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAdviceCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: TColor.rojo.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            color: TColor.rojo,
+            size: 28,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              "Prioriza la técnica antes que la velocidad. Si sientes dolor o mareo, detén el ejercicio y descansa.",
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+
+  const _StatCard({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 94,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: TColor.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: TColor.rojo,
+              size: 24,
+            ),
+            const SizedBox(height: 7),
+            Text(
+              value,
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StepCard extends StatelessWidget {
+  final Map<String, dynamic> step;
+  final bool isLast;
+
+  const _StepCard({
+    required this.step,
+    required this.isLast,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: TColor.rojo.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                step["no"].toString(),
+                style: TextStyle(
+                  color: TColor.rojo,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            if (!isLast)
+              Container(
+                width: 2,
+                height: 54,
+                margin: const EdgeInsets.symmetric(vertical: 4),
+                decoration: BoxDecoration(
+                  color: TColor.rojo.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: TColor.white,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: Colors.grey.shade100,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  step["title"].toString(),
+                  style: TextStyle(
+                    color: TColor.black,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  step["detail"].toString(),
+                  style: TextStyle(
+                    color: TColor.gray,
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,4 +1,3 @@
-import 'package:afermar3_tf_ipc/Home/ultima_actividad_.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +11,7 @@ class Objetivosdiarios extends StatefulWidget {
 
 class _ObjetivosdiariosState extends State<Objetivosdiarios> {
   int touchedIndex = -1;
+  String selectedPeriod = "Semanal";
 
   final List<Map<String, String>> latestArr = [
     {
@@ -91,25 +91,21 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 18, 24, 115),
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 115),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildTodayGoalCard(),
-
-              SizedBox(height: media.width * 0.09),
-
+              SizedBox(height: media.width * 0.08),
+              _buildQuickStats(),
+              SizedBox(height: media.width * 0.08),
               _buildSectionHeader(
                 title: "Progreso",
                 trailing: _buildPeriodDropdown(),
               ),
-
               SizedBox(height: media.width * 0.05),
-
               _buildProgressChart(media),
-
               SizedBox(height: media.width * 0.08),
-
               _buildSectionHeader(
                 title: "Última actividad",
                 trailing: TextButton(
@@ -119,22 +115,25 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
                     style: TextStyle(
                       color: TColor.rojo,
                       fontSize: 14,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
               ),
-
               const SizedBox(height: 4),
-
               ListView.builder(
                 padding: EdgeInsets.zero,
                 physics: const NeverScrollableScrollPhysics(),
                 shrinkWrap: true,
                 itemCount: latestArr.length,
                 itemBuilder: (context, index) {
-                  final wObj = latestArr[index];
-                  return UltimaActividad(obj: wObj);
+                  final item = latestArr[index];
+
+                  return _ActivityLogCard(
+                    image: item["imagen"] ?? "",
+                    title: item["titulo"] ?? "",
+                    time: item["tiempo"] ?? "",
+                  );
                 },
               ),
             ],
@@ -150,15 +149,15 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            TColor.primerColor2.withOpacity(0.18),
-            TColor.primerColor1.withOpacity(0.12),
+            TColor.rojo.withOpacity(0.12),
+            TColor.rojo.withOpacity(0.04),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(26),
         border: Border.all(
-          color: TColor.primerColor2.withOpacity(0.15),
+          color: TColor.rojo.withOpacity(0.10),
         ),
       ),
       child: Column(
@@ -169,8 +168,8 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
                 "Objetivo de hoy",
                 style: TextStyle(
                   color: TColor.negro,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
               const Spacer(),
@@ -178,14 +177,19 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
                 borderRadius: BorderRadius.circular(14),
                 onTap: () {},
                 child: Container(
-                  width: 34,
-                  height: 34,
+                  width: 38,
+                  height: 38,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: TColor.primerG),
+                    gradient: LinearGradient(
+                      colors: [
+                        TColor.rojo.withOpacity(0.85),
+                        TColor.rojo,
+                      ],
+                    ),
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: TColor.rojo.withOpacity(0.22),
+                        color: TColor.rojo.withOpacity(0.25),
                         blurRadius: 12,
                         offset: const Offset(0, 5),
                       ),
@@ -194,15 +198,13 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
                   child: const Icon(
                     Icons.add_rounded,
                     color: Colors.white,
-                    size: 20,
+                    size: 22,
                   ),
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 18),
-
           const Row(
             children: [
               Expanded(
@@ -227,6 +229,39 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
     );
   }
 
+  Widget _buildQuickStats() {
+    return SizedBox(
+      height: 105,
+      child: Row(
+        children: [
+          Expanded(
+            child: _MiniStatCard(
+              icon: Icons.local_fire_department_rounded,
+              title: "Calorías",
+              value: "760 kcal",
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _MiniStatCard(
+              icon: Icons.timer_rounded,
+              title: "Actividad",
+              value: "42 min",
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _MiniStatCard(
+              icon: Icons.check_circle_rounded,
+              title: "Meta",
+              value: "68%",
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSectionHeader({
     required String title,
     required Widget trailing,
@@ -238,8 +273,8 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
           title,
           style: TextStyle(
             color: TColor.negro,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
+            fontSize: 20,
+            fontWeight: FontWeight.w900,
           ),
         ),
         trailing,
@@ -249,43 +284,56 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
 
   Widget _buildPeriodDropdown() {
     return Container(
-      height: 34,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: TColor.negro,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
+          value: selectedPeriod,
           dropdownColor: Colors.white,
-          items: ["Semanal", "Mensual"]
-              .map(
-                (name) => DropdownMenuItem<String>(
-                  value: name,
-                  child: Text(
-                    name,
-                    style: TextStyle(
-                      color: TColor.negro,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: (value) {},
+          borderRadius: BorderRadius.circular(14),
           icon: Icon(
             Icons.keyboard_arrow_down_rounded,
             color: TColor.blanco,
+            size: 22,
           ),
-          hint: Text(
-            "Semanal",
-            style: TextStyle(
-              color: TColor.blanco,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          selectedItemBuilder: (context) {
+            return ["Semanal", "Mensual"].map((name) {
+              return Center(
+                child: Text(
+                  name,
+                  style: TextStyle(
+                    color: TColor.blanco,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              );
+            }).toList();
+          },
+          items: ["Semanal", "Mensual"].map((name) {
+            return DropdownMenuItem<String>(
+              value: name,
+              child: Text(
+                name,
+                style: TextStyle(
+                  color: TColor.negro,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            );
+          }).toList(),
+          onChanged: (value) {
+            if (value == null) return;
+
+            setState(() {
+              selectedPeriod = value;
+            });
+          },
         ),
       ),
     );
@@ -293,14 +341,17 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
 
   Widget _buildProgressChart(Size media) {
     return Container(
-      height: media.width * 0.55,
+      height: media.width * 0.58,
       padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 10),
       decoration: BoxDecoration(
         color: TColor.blanco,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withOpacity(0.055),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -411,7 +462,7 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
   Widget getTitles(double value, TitleMeta meta) {
     final style = TextStyle(
       color: TColor.negro,
-      fontWeight: FontWeight.w600,
+      fontWeight: FontWeight.w700,
       fontSize: 12,
     );
 
@@ -458,49 +509,42 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
           return makeGroupData(
             0,
             5,
-            TColor.primerG,
             isTouched: i == touchedIndex,
           );
         case 1:
           return makeGroupData(
             1,
             10.5,
-            TColor.segundoG,
             isTouched: i == touchedIndex,
           );
         case 2:
           return makeGroupData(
             2,
             5,
-            TColor.primerG,
             isTouched: i == touchedIndex,
           );
         case 3:
           return makeGroupData(
             3,
             7.5,
-            TColor.segundoG,
             isTouched: i == touchedIndex,
           );
         case 4:
           return makeGroupData(
             4,
             15,
-            TColor.primerG,
             isTouched: i == touchedIndex,
           );
         case 5:
           return makeGroupData(
             5,
             5.5,
-            TColor.segundoG,
             isTouched: i == touchedIndex,
           );
         case 6:
           return makeGroupData(
             6,
             8.5,
-            TColor.primerG,
             isTouched: i == touchedIndex,
           );
         default:
@@ -511,8 +555,7 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
 
   BarChartGroupData makeGroupData(
     int x,
-    double y,
-    List<Color> barColor, {
+    double y, {
     bool isTouched = false,
     double width = 22,
     List<int> showTooltips = const [],
@@ -523,7 +566,10 @@ class _ObjetivosdiariosState extends State<Objetivosdiarios> {
         BarChartRodData(
           toY: isTouched ? y + 1 : y,
           gradient: LinearGradient(
-            colors: barColor,
+            colors: [
+              TColor.rojo.withOpacity(0.95),
+              TColor.negro,
+            ],
             begin: Alignment.bottomCenter,
             end: Alignment.topCenter,
           ),
@@ -562,7 +608,7 @@ class TodayTargetCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 78,
+      height: 82,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: TColor.blanco,
@@ -583,9 +629,7 @@ class TodayTargetCell extends StatelessWidget {
             height: 42,
             fit: BoxFit.contain,
           ),
-
           const SizedBox(width: 10),
-
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -595,8 +639,8 @@ class TodayTargetCell extends StatelessWidget {
                   value,
                   style: TextStyle(
                     color: TColor.rojo,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -606,11 +650,156 @@ class TodayTargetCell extends StatelessWidget {
                   style: TextStyle(
                     color: TColor.negro,
                     fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniStatCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+
+  const _MiniStatCard({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 105,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: TColor.blanco,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.045),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: TColor.rojo,
+            size: 23,
+          ),
+          const SizedBox(height: 7),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: TColor.negro,
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: TColor.gris,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivityLogCard extends StatelessWidget {
+  final String image;
+  final String title;
+  final String time;
+
+  const _ActivityLogCard({
+    required this.image,
+    required this.title,
+    required this.time,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: TColor.blanco,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.035),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Image.asset(
+              image,
+              width: 54,
+              height: 54,
+              fit: BoxFit.cover,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: TColor.negro,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  time,
+                  style: TextStyle(
+                    color: TColor.gris,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
             ),
+          ),
+          Icon(
+            Icons.more_vert_rounded,
+            color: TColor.gris.withOpacity(0.7),
+            size: 22,
           ),
         ],
       ),
