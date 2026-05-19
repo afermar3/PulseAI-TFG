@@ -1,9 +1,12 @@
 import 'package:afermar3_tf_ipc/info_user/login_view.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
+import 'package:afermar3_tf_ipc/perfil/contact_view.dart';
+import 'package:afermar3_tf_ipc/perfil/personal_info_view.dart';
+import 'package:afermar3_tf_ipc/perfil/privacy_policy_view.dart';
+import 'package:afermar3_tf_ipc/services/auth_service.dart';
+import 'package:afermar3_tf_ipc/services/profile_service.dart';
 import 'package:afermar3_tf_ipc/widgets/boton.dart';
 import 'package:flutter/material.dart';
-import 'package:afermar3_tf_ipc/perfil/contact_view.dart';
-import 'package:afermar3_tf_ipc/perfil/privacy_policy_view.dart';
 
 class Perfil extends StatefulWidget {
   const Perfil({super.key});
@@ -13,6 +16,9 @@ class Perfil extends StatefulWidget {
 }
 
 class _PerfilWidget extends State<Perfil> {
+  Map<String, dynamic>? profile;
+  bool isLoadingProfile = true;
+
   final List<Map<String, dynamic>> accountArr = [
     {
       "icon": Icons.person_outline_rounded,
@@ -54,19 +60,70 @@ class _PerfilWidget extends State<Perfil> {
     },
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final data = await ProfileService.getProfile();
+
+      if (!mounted) return;
+
+      setState(() {
+        profile = data;
+        isLoadingProfile = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoadingProfile = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openPersonalInfo() async {
+    if (profile == null) return;
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PersonalInfoView(
+          profile: profile!,
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _loadProfile();
+    }
+  }
+
   void _onAccountOptionPressed(String tag) {
     switch (tag) {
       case "1":
-        // TODO: Navegar a pantalla de información personal
+        _openPersonalInfo();
         break;
       case "2":
-        // TODO: Navegar a pantalla de logros
+        _showComingSoon("Logros");
         break;
       case "3":
-        // TODO: Navegar a historial de actividad
+        _showComingSoon("Historial de actividad");
         break;
       case "4":
-        // TODO: Navegar a progreso
+        _showComingSoon("Progreso");
         break;
     }
   }
@@ -90,13 +147,58 @@ class _PerfilWidget extends State<Perfil> {
         );
         break;
       case "7":
-        // TODO: Navegar a ajustes
+        _showComingSoon("Ajustes");
         break;
     }
   }
 
+  void _showComingSoon(String title) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("$title estará disponible próximamente"),
+        backgroundColor: TColor.rojo,
+      ),
+    );
+  }
+
+  String _formatNumber(dynamic value) {
+    if (value == null) return "--";
+
+    final text = value.toString();
+
+    if (text.endsWith(".0")) {
+      return text.replaceAll(".0", "");
+    }
+
+    return text;
+  }
+
+  String _displayText(dynamic value, String fallback) {
+    if (value == null) return fallback;
+
+    final text = value.toString().trim();
+
+    if (text.isEmpty || text == "null") {
+      return fallback;
+    }
+
+    return text;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final height = profile?["height_cm"] == null
+        ? "--"
+        : "${_formatNumber(profile!["height_cm"])} cm";
+
+    final weight = profile?["weight_kg"] == null
+        ? "--"
+        : "${_formatNumber(profile!["weight_kg"])} kg";
+
+    final age = profile?["age"] == null
+        ? "--"
+        : _formatNumber(profile!["age"]);
+
     return Scaffold(
       backgroundColor: TColor.blanco,
       appBar: AppBar(
@@ -117,7 +219,7 @@ class _PerfilWidget extends State<Perfil> {
             padding: const EdgeInsets.all(8),
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              onTap: () {},
+              onTap: _loadProfile,
               child: Container(
                 width: 42,
                 height: 42,
@@ -127,7 +229,7 @@ class _PerfilWidget extends State<Perfil> {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
-                  Icons.more_horiz_rounded,
+                  Icons.refresh_rounded,
                   color: Colors.white,
                   size: 22,
                 ),
@@ -137,76 +239,102 @@ class _PerfilWidget extends State<Perfil> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 12, 22, 115),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildProfileHeader(),
-              const SizedBox(height: 22),
-              const Row(
-                children: [
-                  Expanded(
-                    child: ProfileStatCard(
-                      title: "170 cm",
-                      subtitle: "Altura",
-                      icon: Icons.height_rounded,
-                    ),
+        child: isLoadingProfile
+            ? Center(
+                child: CircularProgressIndicator(
+                  color: TColor.rojo,
+                ),
+              )
+            : RefreshIndicator(
+                color: TColor.rojo,
+                onRefresh: _loadProfile,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(22, 12, 22, 115),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildProfileHeader(),
+
+                      const SizedBox(height: 22),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ProfileStatCard(
+                              title: height,
+                              subtitle: "Altura",
+                              icon: Icons.height_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ProfileStatCard(
+                              title: weight,
+                              subtitle: "Peso",
+                              icon: Icons.monitor_weight_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ProfileStatCard(
+                              title: age,
+                              subtitle: "Edad",
+                              icon: Icons.cake_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 26),
+
+                      _buildSectionCard(
+                        title: "Cuenta",
+                        items: accountArr,
+                        onItemPressed: _onAccountOptionPressed,
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      _buildSectionCard(
+                        title: "Otros",
+                        items: otherArr,
+                        onItemPressed: _onOtherOptionPressed,
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      _buildLogoutButton(),
+                    ],
                   ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: ProfileStatCard(
-                      title: "80 kg",
-                      subtitle: "Peso",
-                      icon: Icons.monitor_weight_rounded,
-                    ),
-                  ),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: ProfileStatCard(
-                      title: "22",
-                      subtitle: "Edad",
-                      icon: Icons.cake_outlined,
-                    ),
-                  ),
-                ],
+                ),
               ),
-              const SizedBox(height: 26),
-              _buildSectionCard(
-                title: "Cuenta",
-                items: accountArr,
-                onItemPressed: _onAccountOptionPressed,
-              ),
-              const SizedBox(height: 20),
-              _buildSectionCard(
-                title: "Otros",
-                items: otherArr,
-                onItemPressed: _onOtherOptionPressed,
-              ),
-              const SizedBox(height: 20),
-              _buildLogoutButton(),
-            ],
-          ),
-        ),
       ),
     );
   }
 
   Widget _buildProfileHeader() {
+    final name = _displayText(profile?["name"], "Usuario");
+    final surname = _displayText(profile?["surname"], "");
+    final goal = _displayText(profile?["goal"], "Sin objetivo definido");
+    final gender = _displayText(profile?["gender"], "Sin género definido");
+
+    final fullName = surname.isEmpty ? name : "$name $surname";
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            TColor.primerColor2.withOpacity(0.18),
-            TColor.primerColor1.withOpacity(0.10),
+            TColor.rojo.withOpacity(0.13),
+            TColor.rojo.withOpacity(0.04),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(26),
         border: Border.all(
-          color: TColor.primerColor2.withOpacity(0.14),
+          color: TColor.rojo.withOpacity(0.10),
         ),
       ),
       child: Row(
@@ -217,7 +345,12 @@ class _PerfilWidget extends State<Perfil> {
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: LinearGradient(colors: TColor.primerG),
+              gradient: LinearGradient(
+                colors: [
+                  TColor.rojo.withOpacity(0.9),
+                  TColor.rojo,
+                ],
+              ),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(40),
@@ -227,13 +360,17 @@ class _PerfilWidget extends State<Perfil> {
               ),
             ),
           ),
+
           const SizedBox(width: 16),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Usuario",
+                  fullName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: TColor.negro,
                     fontSize: 18,
@@ -242,16 +379,30 @@ class _PerfilWidget extends State<Perfil> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "Objetivo: Perder peso",
+                  "Objetivo: $goal",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: TColor.gris,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                const SizedBox(height: 3),
+                Text(
+                  "Género: $gender",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: TColor.gris,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ),
+
           SizedBox(
             width: 82,
             height: 34,
@@ -260,9 +411,7 @@ class _PerfilWidget extends State<Perfil> {
               type: RoundButtonType.bgGradient,
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              onPressed: () {
-                // TODO: Navegar a editar perfil
-              },
+              onPressed: _openPersonalInfo,
             ),
           ),
         ],
@@ -302,7 +451,9 @@ class _PerfilWidget extends State<Perfil> {
               fontWeight: FontWeight.w800,
             ),
           ),
+
           const SizedBox(height: 10),
+
           ListView.separated(
             physics: const NeverScrollableScrollPhysics(),
             shrinkWrap: true,
@@ -334,7 +485,11 @@ class _PerfilWidget extends State<Perfil> {
   Widget _buildLogoutButton() {
     return InkWell(
       borderRadius: BorderRadius.circular(18),
-      onTap: () {
+      onTap: () async {
+        await AuthService.logout();
+
+        if (!mounted) return;
+
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(

@@ -1,5 +1,5 @@
-import 'package:afermar3_tf_ipc/funcionalidad/menu_principal.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
+import 'package:afermar3_tf_ipc/services/profile_service.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:carousel_slider/carousel_controller.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +17,7 @@ class _ObjetivoViewState extends State<objetivo> {
       CarouselSliderController();
 
   int selectedIndex = 0;
+  bool isLoading = false;
 
   final List<Map<String, String>> objetivos = [
     {
@@ -39,19 +40,44 @@ class _ObjetivoViewState extends State<objetivo> {
     },
   ];
 
-  void _confirmarObjetivo() {
-    final objetivoSeleccionado = objetivos[selectedIndex];
+  Future<void> _confirmarObjetivo() async {
+    final objetivoSeleccionado = objetivos[selectedIndex]["titulo"] ?? "";
 
-    // Más adelante aquí guardaremos el objetivo seleccionado
-    // junto con el usuario en la base de datos.
-    debugPrint("Objetivo seleccionado: ${objetivoSeleccionado["titulo"]}");
+    setState(() {
+      isLoading = true;
+    });
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const MainTabView(),
-      ),
-    );
+    try {
+      await ProfileService.updateProfile(
+        goal: objetivoSeleccionado,
+      );
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const MainTabView(),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -70,7 +96,7 @@ class _ObjetivoViewState extends State<objetivo> {
               Row(
                 children: [
                   IconButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: isLoading ? null : () => Navigator.pop(context),
                     icon: Icon(
                       Icons.arrow_back_ios_new_rounded,
                       color: TColor.negro,
@@ -198,11 +224,13 @@ class _ObjetivoViewState extends State<objetivo> {
                     viewportFraction: 0.82,
                     initialPage: selectedIndex,
                     enableInfiniteScroll: false,
-                    onPageChanged: (index, reason) {
-                      setState(() {
-                        selectedIndex = index;
-                      });
-                    },
+                    onPageChanged: isLoading
+                        ? null
+                        : (index, reason) {
+                            setState(() {
+                              selectedIndex = index;
+                            });
+                          },
                   ),
                 ),
               ),
@@ -217,9 +245,11 @@ class _ObjetivoViewState extends State<objetivo> {
                     final bool isActive = selectedIndex == index;
 
                     return GestureDetector(
-                      onTap: () {
-                        carouselController.animateToPage(index);
-                      },
+                      onTap: isLoading
+                          ? null
+                          : () {
+                              carouselController.animateToPage(index);
+                            },
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 250),
                         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -243,17 +273,18 @@ class _ObjetivoViewState extends State<objetivo> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: _confirmarObjetivo,
+                  onPressed: isLoading ? null : _confirmarObjetivo,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: TColor.rojo,
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: TColor.rojo.withOpacity(0.45),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(18),
                     ),
                   ),
                   child: Text(
-                    "Confirmar objetivo",
+                    isLoading ? "Guardando..." : "Confirmar objetivo",
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,

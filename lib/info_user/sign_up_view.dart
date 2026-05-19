@@ -3,6 +3,7 @@ import 'package:afermar3_tf_ipc/info_user/politica_privacidad.dart';
 import 'package:afermar3_tf_ipc/info_user/info_register_view.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/services/auth_service.dart';
+import 'package:afermar3_tf_ipc/services/profile_service.dart';
 import 'package:afermar3_tf_ipc/widgets/boton.dart';
 import 'package:afermar3_tf_ipc/widgets/campostexto.dart';
 import 'package:flutter/material.dart';
@@ -60,6 +61,11 @@ class _SignUpView extends State<SignUp> {
         password: passwordController.text.trim(),
       );
 
+      await ProfileService.updateProfile(
+        name: nameController.text.trim(),
+        surname: surnameController.text.trim(),
+      );
+
       if (!mounted) return;
 
       Navigator.pushReplacement(
@@ -107,7 +113,9 @@ class _SignUpView extends State<SignUp> {
                   "Bienvenido,",
                   style: TextStyle(color: TColor.gris, fontSize: 17),
                 ),
+
                 const SizedBox(height: 4),
+
                 Text(
                   "Crear cuenta",
                   style: TextStyle(
@@ -125,6 +133,7 @@ class _SignUpView extends State<SignUp> {
                   icon: "assets/img/user_text.png",
                   validator: validateName,
                 ),
+
                 const SizedBox(height: 16),
 
                 EditTextField(
@@ -133,6 +142,7 @@ class _SignUpView extends State<SignUp> {
                   icon: "assets/img/user_text.png",
                   validator: validateapellido,
                 ),
+
                 const SizedBox(height: 16),
 
                 EditTextField(
@@ -142,6 +152,7 @@ class _SignUpView extends State<SignUp> {
                   keyboardType: TextInputType.emailAddress,
                   validator: validateEmail,
                 ),
+
                 const SizedBox(height: 16),
 
                 EditTextField(
@@ -151,11 +162,13 @@ class _SignUpView extends State<SignUp> {
                   obscureText: obscurePassword,
                   validator: validatecontra,
                   rightIcon: IconButton(
-                    onPressed: () {
-                      setState(() {
-                        obscurePassword = !obscurePassword;
-                      });
-                    },
+                    onPressed: isLoading
+                        ? null
+                        : () {
+                            setState(() {
+                              obscurePassword = !obscurePassword;
+                            });
+                          },
                     icon: Icon(
                       obscurePassword
                           ? Icons.visibility_off_outlined

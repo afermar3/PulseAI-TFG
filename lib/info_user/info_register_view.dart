@@ -1,5 +1,6 @@
 import 'package:afermar3_tf_ipc/funcionalidad/objetivo.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
+import 'package:afermar3_tf_ipc/services/profile_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -20,6 +21,7 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
   final TextEditingController txtAltura = TextEditingController();
 
   Genero _selectedGenero = Genero.otro;
+  bool isLoading = false;
 
   @override
   void dispose() {
@@ -38,6 +40,29 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
       case Genero.otro:
         return "Otro";
     }
+  }
+
+  String _generoBackendValue(Genero genero) {
+    switch (genero) {
+      case Genero.hombre:
+        return "Hombre";
+      case Genero.mujer:
+        return "Mujer";
+      case Genero.otro:
+        return "Otro";
+    }
+  }
+
+  int _calculateAge(String dateText) {
+    final birthday = DateTime.parse(dateText);
+    final today = DateTime.now();
+
+    return today.year -
+        birthday.year -
+        ((today.month < birthday.month ||
+                (today.month == birthday.month && today.day < birthday.day))
+            ? 1
+            : 0);
   }
 
   Future<void> _selectDate() async {
@@ -73,22 +98,59 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
     }
   }
 
-  void _goNext() {
+  Future<void> _goNext() async {
     FocusScope.of(context).unfocus();
 
-    if (_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Por favor, revisa los datos introducidos."),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final age = _calculateAge(txtDate.text.trim());
+      final weight = double.parse(txtPeso.text.trim().replaceAll(",", "."));
+      final height = double.parse(txtAltura.text.trim().replaceAll(",", "."));
+
+      await ProfileService.updateProfile(
+        gender: _generoBackendValue(_selectedGenero),
+        age: age,
+        weightKg: weight,
+        heightCm: height,
+      );
+
+      if (!mounted) return;
+
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => const objetivo(),
         ),
       );
-    } else {
+    } catch (e) {
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Por favor, revisa los datos introducidos."),
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -112,7 +174,7 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => Navigator.pop(context),
+          onPressed: isLoading ? null : () => Navigator.pop(context),
         ),
       ),
       body: SafeArea(
@@ -164,19 +226,21 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
 
                 const SizedBox(height: 34),
 
-                _ProfileDropdownField(
+                _ProfileDropdownField<Genero>(
                   value: _selectedGenero,
                   label: "Género",
                   icon: Icons.wc_rounded,
                   items: Genero.values,
                   itemLabel: _generoLabel,
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _selectedGenero = value;
-                      });
-                    }
-                  },
+                  onChanged: isLoading
+                      ? null
+                      : (Genero? value) {
+                          if (value != null) {
+                            setState(() {
+                              _selectedGenero = value;
+                            });
+                          }
+                        },
                 ),
 
                 const SizedBox(height: 18),
@@ -186,8 +250,9 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
                   label: "Fecha de nacimiento",
                   icon: Icons.calendar_month_rounded,
                   readOnly: true,
-                  onTap: _selectDate,
+                  onTap: isLoading ? null : _selectDate,
                   validator: validateFecha,
+                  enabled: !isLoading,
                 ),
 
                 const SizedBox(height: 18),
@@ -203,6 +268,7 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
                     FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
                   ],
                   validator: validatePeso,
+                  enabled: !isLoading,
                 ),
 
                 const SizedBox(height: 18),
@@ -218,6 +284,7 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
                     FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
                   ],
                   validator: validateAltura,
+                  enabled: !isLoading,
                 ),
 
                 const SizedBox(height: 34),
@@ -226,18 +293,19 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _goNext,
+                    onPressed: isLoading ? null : _goNext,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: TColor.rojo,
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: TColor.rojo.withOpacity(0.45),
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(18),
                       ),
                     ),
-                    child: const Text(
-                      "Siguiente",
-                      style: TextStyle(
+                    child: Text(
+                      isLoading ? "Guardando..." : "Siguiente",
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
                       ),
@@ -261,6 +329,7 @@ class _ProfileTextField extends StatelessWidget {
   final IconData icon;
   final String? suffixText;
   final bool readOnly;
+  final bool enabled;
   final VoidCallback? onTap;
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
@@ -272,6 +341,7 @@ class _ProfileTextField extends StatelessWidget {
     required this.icon,
     this.suffixText,
     this.readOnly = false,
+    this.enabled = true,
     this.onTap,
     this.keyboardType,
     this.inputFormatters,
@@ -282,6 +352,7 @@ class _ProfileTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      enabled: enabled,
       readOnly: readOnly,
       onTap: onTap,
       keyboardType: keyboardType,
@@ -319,6 +390,12 @@ class _ProfileTextField extends StatelessWidget {
             color: Colors.grey.shade200,
           ),
         ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(
+            color: Colors.grey.shade200,
+          ),
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide(
@@ -350,7 +427,7 @@ class _ProfileDropdownField<T> extends StatelessWidget {
   final IconData icon;
   final List<T> items;
   final String Function(T) itemLabel;
-  final ValueChanged<T?> onChanged;
+  final ValueChanged<T?>? onChanged;
 
   const _ProfileDropdownField({
     required this.value,
@@ -393,6 +470,12 @@ class _ProfileDropdownField<T> extends StatelessWidget {
           vertical: 18,
         ),
         enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide(
+            color: Colors.grey.shade200,
+          ),
+        ),
+        disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide(
             color: Colors.grey.shade200,

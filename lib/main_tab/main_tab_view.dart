@@ -1,4 +1,4 @@
-import 'package:afermar3_tf_ipc/perfil/pantalla_info_personal.dart';
+import 'package:afermar3_tf_ipc/perfil/profile_view.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:flutter/material.dart';
 
