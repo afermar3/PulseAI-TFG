@@ -1,4 +1,4 @@
-import 'package:afermar3_tf_ipc/funcionalidad/objetivo.dart';
+import 'package:afermar3_tf_ipc/info_user/objetivo.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/services/profile_service.dart';
 import 'package:flutter/material.dart';

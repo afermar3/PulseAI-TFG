@@ -2,7 +2,7 @@ import 'package:afermar3_tf_ipc/Home/actividad_acabada.dart';
 import 'package:afermar3_tf_ipc/Home/actividades.dart';
 import 'package:afermar3_tf_ipc/Home/notif.dart';
 import 'package:afermar3_tf_ipc/Home/widget_ejercicio.dart';
-import 'package:afermar3_tf_ipc/funcionalidad/pantallas/ejercicios.dart';
+import 'package:afermar3_tf_ipc/funcionalidad/ejercicios.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/widgets/boton.dart';
 import 'package:dotted_dashed_line/dotted_dashed_line.dart';
