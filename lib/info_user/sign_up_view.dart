@@ -2,6 +2,7 @@ import 'package:afermar3_tf_ipc/info_user/login_view.dart';
 import 'package:afermar3_tf_ipc/info_user/politica_privacidad.dart';
 import 'package:afermar3_tf_ipc/info_user/info_register_view.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
+import 'package:afermar3_tf_ipc/services/auth_service.dart';
 import 'package:afermar3_tf_ipc/widgets/boton.dart';
 import 'package:afermar3_tf_ipc/widgets/campostexto.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +18,75 @@ class SignUp extends StatefulWidget {
 class _SignUpView extends State<SignUp> {
   bool isCheck = false;
   bool obscurePassword = true;
+  bool isLoading = false;
+
   final _formKey = GlobalKey<FormState>();
+
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController surnameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+
+  @override
+  void dispose() {
+    nameController.dispose();
+    surnameController.dispose();
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _register() async {
+    if (!_formKey.currentState!.validate() || !isCheck) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isCheck
+                ? 'Por favor completa todos los campos.'
+                : 'Debes aceptar la Política de Privacidad y los Términos de uso.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      await AuthService.register(
+        email: emailController.text.trim(),
+        password: passwordController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const CompleteProfileView(),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,21 +119,24 @@ class _SignUpView extends State<SignUp> {
 
                 SizedBox(height: media.height * 0.045),
 
-                const EditTextField(
+                EditTextField(
+                  controller: nameController,
                   hintText: "Nombre",
                   icon: "assets/img/user_text.png",
                   validator: validateName,
                 ),
                 const SizedBox(height: 16),
 
-                const EditTextField(
+                EditTextField(
+                  controller: surnameController,
                   hintText: "Apellidos",
                   icon: "assets/img/user_text.png",
                   validator: validateapellido,
                 ),
                 const SizedBox(height: 16),
 
-                const EditTextField(
+                EditTextField(
+                  controller: emailController,
                   hintText: "Correo electrónico",
                   icon: "assets/img/email.png",
                   keyboardType: TextInputType.emailAddress,
@@ -73,6 +145,7 @@ class _SignUpView extends State<SignUp> {
                 const SizedBox(height: 16),
 
                 EditTextField(
+                  controller: passwordController,
                   hintText: "Contraseña",
                   icon: "assets/img/lock.png",
                   obscureText: obscurePassword,
@@ -101,17 +174,19 @@ class _SignUpView extends State<SignUp> {
                     Checkbox(
                       value: isCheck,
                       activeColor: TColor.rojo,
-                      onChanged: (value) {
-                        setState(() {
-                          isCheck = value ?? false;
-                        });
-                      },
+                      onChanged: isLoading
+                          ? null
+                          : (value) {
+                              setState(() {
+                                isCheck = value ?? false;
+                              });
+                            },
                     ),
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.only(top: 12),
                         child: GestureDetector(
-                          onTap: _showMyAlert,
+                          onTap: isLoading ? null : _showMyAlert,
                           child: Text(
                             "Acepto la Política de Privacidad y los Términos de uso",
                             style: TextStyle(
@@ -130,27 +205,8 @@ class _SignUpView extends State<SignUp> {
                 const SizedBox(height: 70),
 
                 botonredondo(
-                  title: "Registrarme",
-                  onPressed: () {
-                    if (_formKey.currentState!.validate() && isCheck) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const CompleteProfileView(),
-                        ),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            isCheck
-                                ? 'Por favor completa todos los campos.'
-                                : 'Debes aceptar la Política de Privacidad y los Términos de uso.',
-                          ),
-                        ),
-                      );
-                    }
-                  },
+                  title: isLoading ? "Registrando..." : "Registrarme",
+                  onPressed: isLoading ? () {} : _register,
                 ),
 
                 const SizedBox(height: 24),
@@ -196,12 +252,16 @@ class _SignUpView extends State<SignUp> {
                 const SizedBox(height: 26),
 
                 TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const Login()),
-                    );
-                  },
+                  onPressed: isLoading
+                      ? null
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const Login(),
+                            ),
+                          );
+                        },
                   child: RichText(
                     text: TextSpan(
                       text: "¿Ya tienes una cuenta? ",
