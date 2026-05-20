@@ -1,4 +1,5 @@
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
+import 'package:afermar3_tf_ipc/services/ai_chat_service.dart';
 import 'package:flutter/material.dart';
 
 class AiCoachView extends StatefulWidget {
@@ -10,12 +11,15 @@ class AiCoachView extends StatefulWidget {
 
 class _AiCoachViewState extends State<AiCoachView> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  bool _isLoading = false;
 
   final List<Map<String, dynamic>> _messages = [
     {
       "isUser": false,
       "text":
-          "Hola, soy tu Coach IA. Puedo ayudarte con rutinas, dieta, progreso, ejercicios y objetivos. ¿Qué quieres mejorar hoy?",
+          "Hola, soy tu Coach IA de PulseAI. Puedes preguntarme sobre entrenamiento, comida, sueño o hábitos saludables.",
     },
   ];
 
@@ -45,13 +49,14 @@ class _AiCoachViewState extends State<AiCoachView> {
   @override
   void dispose() {
     _messageController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
 
-    if (text.isEmpty) return;
+    if (text.isEmpty || _isLoading) return;
 
     setState(() {
       _messages.add({
@@ -61,17 +66,114 @@ class _AiCoachViewState extends State<AiCoachView> {
 
       _messages.add({
         "isUser": false,
-        "text":
-            "He recibido tu petición. Más adelante conectaré esta respuesta con el backend y la IA para generar una recomendación real y, si lo confirmas, aplicar cambios en tu perfil, dieta o rutina.",
+        "text": "Pensando...",
+        "isLoading": true,
       });
+
+      _isLoading = true;
     });
 
     _messageController.clear();
+    _scrollToBottom();
+
+    try {
+      final answer = await AiChatService.sendMessage(text);
+
+      if (!mounted) return;
+
+      setState(() {
+        final loadingIndex = _messages.indexWhere(
+          (message) => message["isLoading"] == true,
+        );
+
+        if (loadingIndex != -1) {
+          _messages[loadingIndex] = {
+            "isUser": false,
+            "text": answer,
+          };
+        } else {
+          _messages.add({
+            "isUser": false,
+            "text": answer,
+          });
+        }
+      });
+
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+
+      final errorMessage = e.toString().replaceFirst("Exception: ", "");
+
+      setState(() {
+        final loadingIndex = _messages.indexWhere(
+          (message) => message["isLoading"] == true,
+        );
+
+        if (loadingIndex != -1) {
+          _messages[loadingIndex] = {
+            "isUser": false,
+            "text": errorMessage,
+          };
+        } else {
+          _messages.add({
+            "isUser": false,
+            "text": errorMessage,
+          });
+        }
+      });
+
+      _scrollToBottom();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _sendQuickAction(String action) {
-    _messageController.text = action;
+    if (_isLoading) return;
+
+    switch (action) {
+      case "Crear rutina":
+        _messageController.text =
+            "Créame una rutina completa y personalizada de 4 días por semana según mi perfil y mi objetivo actual. Incluye distribución semanal, ejercicios, series, repeticiones, descanso, calentamiento y progresión semanal.";
+        break;
+
+      case "Ajustar dieta":
+        _messageController.text =
+            "Dame recomendaciones de alimentación personalizadas según mi perfil y mi objetivo actual. Incluye ideas de comidas, distribución diaria, proteínas, hidratación y consejos prácticos.";
+        break;
+
+      case "Analizar progreso":
+        _messageController.text =
+            "Analiza mi progreso actual según mi perfil y objetivo. Dame puntos fuertes, aspectos a mejorar y recomendaciones concretas para esta semana.";
+        break;
+
+      case "Resolver duda":
+        _messageController.text =
+            "Tengo una duda sobre entrenamiento, alimentación o descanso.";
+        break;
+
+      default:
+        _messageController.text = action;
+    }
+
     _sendMessage();
+  }
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 180), () {
+      if (!_scrollController.hasClients) return;
+
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   @override
@@ -120,6 +222,7 @@ class _AiCoachViewState extends State<AiCoachView> {
           children: [
             Expanded(
               child: ListView(
+                controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(22, 12, 22, 16),
                 children: [
                   _buildHeaderCard(),
@@ -136,9 +239,12 @@ class _AiCoachViewState extends State<AiCoachView> {
                   ),
                   const SizedBox(height: 14),
                   ..._messages.map((message) {
+                    final isLoadingMessage = message["isLoading"] == true;
+
                     return _ChatBubble(
                       text: message["text"].toString(),
                       isUser: message["isUser"] as bool,
+                      isLoading: isLoadingMessage,
                     );
                   }),
                 ],
@@ -206,7 +312,7 @@ class _AiCoachViewState extends State<AiCoachView> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  "Pídele rutinas, dietas, análisis de progreso o cambios en tu plan.",
+                  "Pídele rutinas, consejos de alimentación, descanso o hábitos saludables.",
                   style: TextStyle(
                     color: TColor.gris,
                     fontSize: 13,
@@ -251,52 +357,57 @@ class _AiCoachViewState extends State<AiCoachView> {
 
             return InkWell(
               borderRadius: BorderRadius.circular(22),
-              onTap: () {
-                _sendQuickAction(item["title"].toString());
-              },
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: TColor.blanco,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: Colors.grey.shade100,
+              onTap: _isLoading
+                  ? null
+                  : () {
+                      _sendQuickAction(item["title"].toString());
+                    },
+              child: Opacity(
+                opacity: _isLoading ? 0.55 : 1,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: TColor.blanco,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: Colors.grey.shade100,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.045),
+                        blurRadius: 14,
+                        offset: const Offset(0, 7),
+                      ),
+                    ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.045),
-                      blurRadius: 14,
-                      offset: const Offset(0, 7),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      item["icon"] as IconData,
-                      color: TColor.rojo,
-                      size: 26,
-                    ),
-                    const Spacer(),
-                    Text(
-                      item["title"].toString(),
-                      style: TextStyle(
-                        color: TColor.negro,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        item["icon"] as IconData,
+                        color: TColor.rojo,
+                        size: 26,
                       ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      item["subtitle"].toString(),
-                      style: TextStyle(
-                        color: TColor.gris,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                      const Spacer(),
+                      Text(
+                        item["title"].toString(),
+                        style: TextStyle(
+                          color: TColor.negro,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 3),
+                      Text(
+                        item["subtitle"].toString(),
+                        style: TextStyle(
+                          color: TColor.gris,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -333,14 +444,19 @@ class _AiCoachViewState extends State<AiCoachView> {
           Expanded(
             child: TextField(
               controller: _messageController,
+              enabled: !_isLoading,
               minLines: 1,
               maxLines: 4,
               textInputAction: TextInputAction.send,
               onSubmitted: (_) {
-                _sendMessage();
+                if (!_isLoading) {
+                  _sendMessage();
+                }
               },
               decoration: InputDecoration(
-                hintText: "Pregúntale algo a tu Coach IA...",
+                hintText: _isLoading
+                    ? "PulseAI está respondiendo..."
+                    : "Pregúntale algo a tu Coach IA...",
                 hintStyle: TextStyle(
                   color: TColor.gris,
                   fontSize: 13,
@@ -362,19 +478,36 @@ class _AiCoachViewState extends State<AiCoachView> {
           const SizedBox(width: 10),
           InkWell(
             borderRadius: BorderRadius.circular(18),
-            onTap: _sendMessage,
+            onTap: _isLoading ? null : _sendMessage,
             child: Container(
               width: 52,
               height: 52,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: TColor.primerG),
+                gradient: LinearGradient(
+                  colors: _isLoading
+                      ? [
+                          Colors.grey.shade400,
+                          Colors.grey.shade500,
+                        ]
+                      : TColor.primerG,
+                ),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: const Icon(
-                Icons.send_rounded,
-                color: Colors.white,
-                size: 22,
-              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      width: 21,
+                      height: 21,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.3,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.send_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
             ),
           ),
         ],
@@ -386,10 +519,12 @@ class _AiCoachViewState extends State<AiCoachView> {
 class _ChatBubble extends StatelessWidget {
   final String text;
   final bool isUser;
+  final bool isLoading;
 
   const _ChatBubble({
     required this.text,
     required this.isUser,
+    this.isLoading = false,
   });
 
   @override
@@ -414,15 +549,39 @@ class _ChatBubble extends StatelessWidget {
             bottomRight: Radius.circular(isUser ? 4 : 18),
           ),
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            color: isUser ? Colors.white : TColor.negro,
-            fontSize: 13,
-            height: 1.35,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        child: isLoading
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: TColor.rojo,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    text,
+                    style: TextStyle(
+                      color: TColor.gris,
+                      fontSize: 13,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              )
+            : Text(
+                text,
+                style: TextStyle(
+                  color: isUser ? Colors.white : TColor.negro,
+                  fontSize: 13,
+                  height: 1.35,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
       ),
     );
   }
