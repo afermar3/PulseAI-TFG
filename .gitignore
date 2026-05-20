@@ -49,3 +49,7 @@ backend/__pycache__/
 backend/app/__pycache__/
 backend/**/*.pyc
 backend/pulseai.db
+
+
+backend/app/generated_images/
+backend/generated_images/
