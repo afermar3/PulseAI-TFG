@@ -6,11 +6,15 @@ import 'package:flutter/material.dart';
 class AiGeneratedWorkoutView extends StatefulWidget {
   final Map<String, dynamic>? initialWorkout;
   final bool isSavedWorkout;
+  final int? savedWorkoutId;
+  final bool isActiveWorkout;
 
   const AiGeneratedWorkoutView({
     super.key,
     this.initialWorkout,
     this.isSavedWorkout = false,
+    this.savedWorkoutId,
+    this.isActiveWorkout = false,
   });
 
   @override
@@ -19,10 +23,14 @@ class AiGeneratedWorkoutView extends StatefulWidget {
 
 class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
   late Future<Map<String, dynamic>> _workoutFuture;
+  late bool _isActiveWorkout;
+  bool _isActivating = false;
 
   @override
   void initState() {
     super.initState();
+
+    _isActiveWorkout = widget.isActiveWorkout;
 
     if (widget.initialWorkout != null) {
       _workoutFuture = Future.value(widget.initialWorkout!);
@@ -77,6 +85,50 @@ class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
     }
   }
 
+  Future<void> _activateWorkout() async {
+    final workoutId = widget.savedWorkoutId;
+
+    if (workoutId == null || _isActivating || _isActiveWorkout) return;
+
+    setState(() {
+      _isActivating = true;
+    });
+
+    try {
+      await WorkoutPlanService.activateWorkoutPlan(workoutId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _isActiveWorkout = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("Rutina activada correctamente"),
+          backgroundColor: TColor.rojo,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isActivating = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -94,7 +146,7 @@ class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
           ),
         ),
         leading: IconButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, _isActiveWorkout),
           icon: Icon(
             Icons.arrow_back_ios_new_rounded,
             color: TColor.negro,
@@ -134,8 +186,11 @@ class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
 
             return _WorkoutContent(
               workout: workout,
-              showSaveButton: !widget.isSavedWorkout,
+              bottomButtonMode: widget.isSavedWorkout ? "activate" : "save",
+              isActiveWorkout: _isActiveWorkout,
+              isBottomButtonLoading: _isActivating,
               onSave: () => _saveWorkout(workout),
+              onActivate: _activateWorkout,
             );
           },
         ),
@@ -146,13 +201,19 @@ class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
 
 class _WorkoutContent extends StatelessWidget {
   final Map<String, dynamic> workout;
-  final bool showSaveButton;
+  final String bottomButtonMode;
+  final bool isActiveWorkout;
+  final bool isBottomButtonLoading;
   final VoidCallback onSave;
+  final VoidCallback onActivate;
 
   const _WorkoutContent({
     required this.workout,
-    required this.showSaveButton,
+    required this.bottomButtonMode,
+    required this.isActiveWorkout,
+    required this.isBottomButtonLoading,
     required this.onSave,
+    required this.onActivate,
   });
 
   @override
@@ -168,6 +229,9 @@ class _WorkoutContent extends StatelessWidget {
     final progression = workout["progression"] as List? ?? [];
     final finalTips = workout["final_tips"] as List? ?? [];
 
+    final showBottomButton =
+        bottomButtonMode == "save" || bottomButtonMode == "activate";
+
     return Stack(
       children: [
         SingleChildScrollView(
@@ -175,7 +239,7 @@ class _WorkoutContent extends StatelessWidget {
             22,
             12,
             22,
-            showSaveButton ? 110 : 24,
+            showBottomButton ? 110 : 24,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,13 +320,17 @@ class _WorkoutContent extends StatelessWidget {
             ],
           ),
         ),
-        if (showSaveButton)
+        if (showBottomButton)
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
-            child: _SaveWorkoutBottomBar(
+            child: _WorkoutBottomBar(
+              mode: bottomButtonMode,
+              isActiveWorkout: isActiveWorkout,
+              isLoading: isBottomButtonLoading,
               onSave: onSave,
+              onActivate: onActivate,
             ),
           ),
       ],
@@ -659,15 +727,43 @@ class _ListSection extends StatelessWidget {
   }
 }
 
-class _SaveWorkoutBottomBar extends StatelessWidget {
+class _WorkoutBottomBar extends StatelessWidget {
+  final String mode;
+  final bool isActiveWorkout;
+  final bool isLoading;
   final VoidCallback onSave;
+  final VoidCallback onActivate;
 
-  const _SaveWorkoutBottomBar({
+  const _WorkoutBottomBar({
+    required this.mode,
+    required this.isActiveWorkout,
+    required this.isLoading,
     required this.onSave,
+    required this.onActivate,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bool isSaveMode = mode == "save";
+
+    final String label = isSaveMode
+        ? "Guardar rutina"
+        : isActiveWorkout
+            ? "Rutina activa"
+            : "Usar como rutina activa";
+
+    final IconData icon = isSaveMode
+        ? Icons.save_rounded
+        : isActiveWorkout
+            ? Icons.check_circle_rounded
+            : Icons.play_circle_fill_rounded;
+
+    final VoidCallback? onPressed = isLoading || isActiveWorkout
+        ? null
+        : isSaveMode
+            ? onSave
+            : onActivate;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(22, 12, 22, 18),
       decoration: BoxDecoration(
@@ -686,12 +782,24 @@ class _SaveWorkoutBottomBar extends StatelessWidget {
           width: double.infinity,
           height: 56,
           child: ElevatedButton.icon(
-            onPressed: onSave,
-            icon: const Icon(Icons.save_rounded),
-            label: const Text("Guardar rutina"),
+            onPressed: onPressed,
+            icon: isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : Icon(icon),
+            label: Text(label),
             style: ElevatedButton.styleFrom(
-              backgroundColor: TColor.rojo,
+              backgroundColor: isActiveWorkout ? Colors.green : TColor.rojo,
               foregroundColor: Colors.white,
+              disabledBackgroundColor:
+                  isActiveWorkout ? Colors.green : Colors.grey.shade400,
+              disabledForegroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),

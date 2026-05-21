@@ -1,3 +1,6 @@
+import 'package:afermar3_tf_ipc/IA/ai_generated_workout_view.dart';
+import 'package:afermar3_tf_ipc/IA/saved_workouts_view.dart';
+import 'package:afermar3_tf_ipc/services/workout_plan_service.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:afermar3_tf_ipc/workout_tracker/workout_detail_view.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -11,6 +14,9 @@ class WorkoutTrackerView extends StatefulWidget {
 }
 
 class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
+  Map<String, dynamic>? activeWorkout;
+  bool isLoadingActiveWorkout = true;
+
   final List<Map<String, dynamic>> scheduledWorkouts = [
     {
       "id": 1,
@@ -82,6 +88,71 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadActiveWorkout();
+  }
+
+  Future<void> _loadActiveWorkout() async {
+    try {
+      final workout = await WorkoutPlanService.getActiveWorkoutPlan();
+
+      if (!mounted) return;
+
+      setState(() {
+        activeWorkout = workout;
+        isLoadingActiveWorkout = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        activeWorkout = null;
+        isLoadingActiveWorkout = false;
+      });
+    }
+  }
+
+  Future<void> _openSavedWorkouts() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SavedWorkoutsView(),
+      ),
+    );
+
+    _loadActiveWorkout();
+  }
+
+  void _openActiveWorkout() {
+    final workout = activeWorkout;
+
+    if (workout == null) {
+      _openSavedWorkouts();
+      return;
+    }
+
+    final content = workout["content"] as Map<String, dynamic>?;
+
+    if (content == null) {
+      _openSavedWorkouts();
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AiGeneratedWorkoutView(
+          initialWorkout: content,
+          isSavedWorkout: true,
+          savedWorkoutId: workout["id"] as int?,
+          isActiveWorkout: true,
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context).size;
     final canPop = Navigator.canPop(context);
@@ -132,9 +203,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                 padding: const EdgeInsets.all(8),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(14),
-                  onTap: () {
-                    // TODO: abrir filtros, calendario o ajustes cuando conectemos backend
-                  },
+                  onTap: _openSavedWorkouts,
                   child: Container(
                     width: 42,
                     height: 42,
@@ -144,7 +213,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Icon(
-                      Icons.more_horiz_rounded,
+                      Icons.bookmark_rounded,
                       color: Colors.white,
                       size: 22,
                     ),
@@ -227,10 +296,8 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                     const SizedBox(height: 26),
                     _buildSectionHeader(
                       title: "Próximos entrenamientos",
-                      actionText: "Ver todos",
-                      onTap: () {
-                        // TODO: pantalla calendario / lista completa desde backend
-                      },
+                      actionText: "Mis rutinas",
+                      onTap: _openSavedWorkouts,
                     ),
                     const SizedBox(height: 12),
                     ListView.builder(
@@ -247,10 +314,6 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                             setState(() {
                               workout["enabled"] = value;
                             });
-
-                            // TODO backend:
-                            // PATCH /scheduled-workouts/{id}
-                            // body: { enabled: value }
                           },
                         );
                       },
@@ -260,7 +323,13 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                       title: "¿Qué quieres entrenar?",
                       actionText: "IA",
                       onTap: () {
-                        // TODO: abrir Coach IA con contexto de entrenamiento
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const AiGeneratedWorkoutView(),
+                          ),
+                        );
                       },
                     ),
                     const SizedBox(height: 12),
@@ -330,6 +399,18 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
   }
 
   Widget _buildDailyScheduleCard() {
+    final hasActiveWorkout = activeWorkout != null;
+
+    final activeTitle = hasActiveWorkout
+        ? activeWorkout!["title"]?.toString() ?? "Rutina activa"
+        : "Plan de hoy";
+
+    final subtitle = isLoadingActiveWorkout
+        ? "Cargando rutina activa..."
+        : hasActiveWorkout
+            ? "${activeWorkout!["days_per_week"] ?? "-"} días/semana · ${activeWorkout!["duration_minutes"] ?? "-"} min"
+            : "No tienes ninguna rutina activa";
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -357,8 +438,10 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
               borderRadius: BorderRadius.circular(18),
             ),
             child: Icon(
-              Icons.calendar_month_rounded,
-              color: TColor.primaryColor1,
+              hasActiveWorkout
+                  ? Icons.check_circle_rounded
+                  : Icons.calendar_month_rounded,
+              color: hasActiveWorkout ? Colors.green : TColor.primaryColor1,
               size: 28,
             ),
           ),
@@ -368,7 +451,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Plan de hoy",
+                  hasActiveWorkout ? "Rutina activa" : "Plan de hoy",
                   style: TextStyle(
                     color: TColor.black,
                     fontSize: 16,
@@ -377,7 +460,20 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "Tienes 1 entrenamiento programado",
+                  activeTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: TColor.black,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: TColor.gray,
                     fontSize: 12,
@@ -390,21 +486,24 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
           SizedBox(
             height: 36,
             child: ElevatedButton(
-              onPressed: () {
-                // TODO: abrir calendario / detalle del plan diario
-              },
+              onPressed: isLoadingActiveWorkout
+                  ? null
+                  : hasActiveWorkout
+                      ? _openActiveWorkout
+                      : _openSavedWorkouts,
               style: ElevatedButton.styleFrom(
                 backgroundColor: TColor.primaryColor1,
                 foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade300,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18),
                 ),
               ),
-              child: const Text(
-                "Ver",
-                style: TextStyle(
+              child: Text(
+                hasActiveWorkout ? "Ver" : "Elegir",
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w800,
                 ),
@@ -465,9 +564,6 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                 setState(() {
                   selectedFilter = index;
                 });
-
-                // TODO backend:
-                // GET /workouts?category=filters[index]
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 220),

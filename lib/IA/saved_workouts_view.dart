@@ -57,7 +57,7 @@ class _SavedWorkoutsViewState extends State<SavedWorkoutsView> {
     }
   }
 
-  void _openWorkout(Map<String, dynamic> savedWorkout) {
+  Future<void> _openWorkout(Map<String, dynamic> savedWorkout) async {
     final content = savedWorkout["content"] as Map<String, dynamic>?;
 
     if (content == null) {
@@ -69,15 +69,21 @@ class _SavedWorkoutsViewState extends State<SavedWorkoutsView> {
       return;
     }
 
-    Navigator.push(
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => AiGeneratedWorkoutView(
           initialWorkout: content,
           isSavedWorkout: true,
+          savedWorkoutId: savedWorkout["id"] as int?,
+          isActiveWorkout: savedWorkout["is_active"] == true,
         ),
       ),
     );
+
+    if (result == true && mounted) {
+      _refresh();
+    }
   }
 
   void _confirmDelete(Map<String, dynamic> workout) {
@@ -211,6 +217,7 @@ class _SavedWorkoutCard extends StatelessWidget {
     final level = workout["level"]?.toString() ?? "Sin nivel";
     final daysPerWeek = workout["days_per_week"]?.toString() ?? "-";
     final durationMinutes = workout["duration_minutes"]?.toString() ?? "-";
+    final isActive = workout["is_active"] == true;
 
     return InkWell(
       borderRadius: BorderRadius.circular(24),
@@ -221,7 +228,8 @@ class _SavedWorkoutCard extends StatelessWidget {
           color: TColor.blanco,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: Colors.grey.shade100,
+            color: isActive ? Colors.green : Colors.grey.shade100,
+            width: isActive ? 1.4 : 1,
           ),
           boxShadow: [
             BoxShadow(
@@ -234,6 +242,38 @@ class _SavedWorkoutCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (isActive) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.green,
+                      size: 16,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      "Rutina activa",
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             Row(
               children: [
                 Container(

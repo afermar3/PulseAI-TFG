@@ -68,6 +68,62 @@ class WorkoutPlanService {
     throw Exception(data["detail"] ?? "No se han podido cargar las rutinas");
   }
 
+  static Future<Map<String, dynamic>?> getActiveWorkoutPlan() async {
+    final token = await TokenStorage.getToken();
+
+    if (token == null) {
+      throw Exception("No hay sesión iniciada");
+    }
+
+    final url = Uri.parse("${ApiClient.baseUrl}/workout-plans/active");
+
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    if (response.statusCode == 404) {
+      return null;
+    }
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data as Map<String, dynamic>;
+    }
+
+    throw Exception(data["detail"] ?? "No se ha podido cargar la rutina activa");
+  }
+
+  static Future<Map<String, dynamic>> activateWorkoutPlan(int workoutId) async {
+    final token = await TokenStorage.getToken();
+
+    if (token == null) {
+      throw Exception("No hay sesión iniciada");
+    }
+
+    final url = Uri.parse(
+      "${ApiClient.baseUrl}/workout-plans/$workoutId/activate",
+    );
+
+    final response = await http.patch(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data as Map<String, dynamic>;
+    }
+
+    throw Exception(data["detail"] ?? "No se ha podido activar la rutina");
+  }
+
   static Future<void> deleteWorkoutPlan(int workoutId) async {
     final token = await TokenStorage.getToken();
 
@@ -89,6 +145,7 @@ class WorkoutPlanService {
     }
 
     final data = jsonDecode(response.body);
+
     throw Exception(data["detail"] ?? "No se ha podido eliminar la rutina");
   }
 }

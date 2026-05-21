@@ -136,6 +136,8 @@ class SavedWorkout(Base):
 
     content_json = Column(Text, nullable=False)
 
+    is_active = Column(Boolean, default=False)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")

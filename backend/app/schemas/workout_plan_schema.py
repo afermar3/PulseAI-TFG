@@ -27,4 +27,5 @@ class WorkoutPlanResponse(BaseModel):
     duration_minutes: Optional[int] = None
 
     content: Dict[str, Any]
+    is_active: bool
     created_at: datetime

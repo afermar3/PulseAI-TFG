@@ -29,6 +29,7 @@ def _saved_workout_to_response(saved_workout: SavedWorkout) -> WorkoutPlanRespon
         days_per_week=saved_workout.days_per_week,
         duration_minutes=saved_workout.duration_minutes,
         content=json.loads(saved_workout.content_json),
+        is_active=bool(saved_workout.is_active),
         created_at=saved_workout.created_at,
     )
 
@@ -48,6 +49,7 @@ def save_workout_plan(
         days_per_week=data.days_per_week,
         duration_minutes=data.duration_minutes,
         content_json=json.dumps(data.content, ensure_ascii=False),
+        is_active=False,
     )
 
     db.add(saved_workout)
@@ -73,6 +75,66 @@ def get_my_workout_plans(
         _saved_workout_to_response(saved_workout)
         for saved_workout in saved_workouts
     ]
+
+
+@router.get("/active", response_model=WorkoutPlanResponse)
+def get_active_workout_plan(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    active_workout = (
+        db.query(SavedWorkout)
+        .filter(
+            SavedWorkout.user_id == current_user.id,
+            SavedWorkout.is_active == True,
+        )
+        .first()
+    )
+
+    if not active_workout:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No tienes ninguna rutina activa",
+        )
+
+    return _saved_workout_to_response(active_workout)
+
+
+@router.patch("/{workout_id}/activate", response_model=WorkoutPlanResponse)
+def activate_workout_plan(
+    workout_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    workout_to_activate = (
+        db.query(SavedWorkout)
+        .filter(
+            SavedWorkout.id == workout_id,
+            SavedWorkout.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not workout_to_activate:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rutina no encontrada",
+        )
+
+    db.query(SavedWorkout).filter(
+        SavedWorkout.user_id == current_user.id,
+    ).update(
+        {
+            SavedWorkout.is_active: False,
+        }
+    )
+
+    workout_to_activate.is_active = True
+
+    db.commit()
+    db.refresh(workout_to_activate)
+
+    return _saved_workout_to_response(workout_to_activate)
 
 
 @router.get("/{workout_id}", response_model=WorkoutPlanResponse)
