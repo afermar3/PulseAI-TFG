@@ -30,8 +30,8 @@ def generate_text_response(prompt: str) -> str:
         try:
             response = client.models.generate_content(
                 #model="gemini-2.5-flash",
-                #model="gemini-2.5-flash-lite",
-                model="gemini-2.0-flash-lite",
+                model="gemini-2.5-flash-lite",
+                #model="gemini-2.0-flash-lite",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.35,
@@ -73,8 +73,8 @@ def generate_json_response(
         try:
             response = client.models.generate_content(
                 #model="gemini-2.5-flash",
-                #model="gemini-2.5-flash-lite",
-                model="gemini-2.0-flash-lite",
+                model="gemini-2.5-flash-lite",
+                #model="gemini-2.0-flash-lite",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     temperature=0.25,

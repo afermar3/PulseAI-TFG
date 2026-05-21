@@ -4,7 +4,14 @@ import 'package:afermar3_tf_ipc/services/workout_plan_service.dart';
 import 'package:flutter/material.dart';
 
 class AiGeneratedWorkoutView extends StatefulWidget {
-  const AiGeneratedWorkoutView({super.key});
+  final Map<String, dynamic>? initialWorkout;
+  final bool isSavedWorkout;
+
+  const AiGeneratedWorkoutView({
+    super.key,
+    this.initialWorkout,
+    this.isSavedWorkout = false,
+  });
 
   @override
   State<AiGeneratedWorkoutView> createState() => _AiGeneratedWorkoutViewState();
@@ -17,15 +24,21 @@ class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
   void initState() {
     super.initState();
 
-    _workoutFuture = AiWorkoutService.generateWorkout(
-      daysPerWeek: 4,
-      durationMinutes: 60,
-      focus: "Ganar músculo",
-      level: "Principiante/intermedio",
-    );
+    if (widget.initialWorkout != null) {
+      _workoutFuture = Future.value(widget.initialWorkout!);
+    } else {
+      _workoutFuture = AiWorkoutService.generateWorkout(
+        daysPerWeek: 4,
+        durationMinutes: 60,
+        focus: "Ganar músculo",
+        level: "Principiante/intermedio",
+      );
+    }
   }
 
   Future<void> _regenerateWorkout() async {
+    if (widget.isSavedWorkout) return;
+
     setState(() {
       _workoutFuture = AiWorkoutService.generateWorkout(
         daysPerWeek: 4,
@@ -34,6 +47,34 @@ class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
         level: "Principiante/intermedio",
       );
     });
+  }
+
+  Future<void> _saveWorkout(Map<String, dynamic> workout) async {
+    try {
+      await WorkoutPlanService.saveWorkoutPlan(
+        workout: workout,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("Rutina guardada correctamente"),
+          backgroundColor: TColor.rojo,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 
   @override
@@ -45,7 +86,7 @@ class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
         elevation: 0,
         centerTitle: true,
         title: Text(
-          "Rutina IA",
+          widget.isSavedWorkout ? "Rutina guardada" : "Rutina IA",
           style: TextStyle(
             color: TColor.negro,
             fontSize: 20,
@@ -59,15 +100,17 @@ class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
             color: TColor.negro,
           ),
         ),
-        actions: [
-          IconButton(
-            onPressed: _regenerateWorkout,
-            icon: Icon(
-              Icons.refresh_rounded,
-              color: TColor.rojo,
-            ),
-          ),
-        ],
+        actions: widget.isSavedWorkout
+            ? []
+            : [
+                IconButton(
+                  onPressed: _regenerateWorkout,
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    color: TColor.rojo,
+                  ),
+                ),
+              ],
       ),
       body: SafeArea(
         child: FutureBuilder<Map<String, dynamic>>(
@@ -91,33 +134,8 @@ class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
 
             return _WorkoutContent(
               workout: workout,
-              onSave: () async {
-  try {
-    await WorkoutPlanService.saveWorkoutPlan(
-      workout: workout,
-    );
-
-    if (!context.mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text("Rutina guardada correctamente"),
-        backgroundColor: TColor.rojo,
-      ),
-    );
-  } catch (e) {
-    if (!context.mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          e.toString().replaceFirst("Exception: ", ""),
-        ),
-        backgroundColor: Colors.redAccent,
-      ),
-    );
-  }
-},
+              showSaveButton: !widget.isSavedWorkout,
+              onSave: () => _saveWorkout(workout),
             );
           },
         ),
@@ -128,10 +146,12 @@ class _AiGeneratedWorkoutViewState extends State<AiGeneratedWorkoutView> {
 
 class _WorkoutContent extends StatelessWidget {
   final Map<String, dynamic> workout;
+  final bool showSaveButton;
   final VoidCallback onSave;
 
   const _WorkoutContent({
     required this.workout,
+    required this.showSaveButton,
     required this.onSave,
   });
 
@@ -151,7 +171,12 @@ class _WorkoutContent extends StatelessWidget {
     return Stack(
       children: [
         SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 12, 22, 110),
+          padding: EdgeInsets.fromLTRB(
+            22,
+            12,
+            22,
+            showSaveButton ? 110 : 24,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -159,9 +184,7 @@ class _WorkoutContent extends StatelessWidget {
                 title: title,
                 summary: summary,
               ),
-
               const SizedBox(height: 18),
-
               Row(
                 children: [
                   Expanded(
@@ -181,9 +204,7 @@ class _WorkoutContent extends StatelessWidget {
                   ),
                 ],
               ),
-
               const SizedBox(height: 10),
-
               Row(
                 children: [
                   Expanded(
@@ -203,9 +224,7 @@ class _WorkoutContent extends StatelessWidget {
                   ),
                 ],
               ),
-
               const SizedBox(height: 24),
-
               Text(
                 "Plan semanal",
                 style: TextStyle(
@@ -214,27 +233,21 @@ class _WorkoutContent extends StatelessWidget {
                   fontWeight: FontWeight.w900,
                 ),
               ),
-
               const SizedBox(height: 14),
-
               ...days.map((day) {
                 return _WorkoutDayCard(day: day as Map<String, dynamic>);
               }),
-
               const SizedBox(height: 12),
-
               _ListSection(
                 title: "Calentamiento",
                 icon: Icons.local_fire_department_rounded,
                 items: warmup,
               ),
-
               _ListSection(
                 title: "Progresión",
                 icon: Icons.trending_up_rounded,
                 items: progression,
               ),
-
               _ListSection(
                 title: "Consejos finales",
                 icon: Icons.tips_and_updates_rounded,
@@ -243,15 +256,15 @@ class _WorkoutContent extends StatelessWidget {
             ],
           ),
         ),
-
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: _SaveWorkoutBottomBar(
-            onSave: onSave,
+        if (showSaveButton)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _SaveWorkoutBottomBar(
+              onSave: onSave,
+            ),
           ),
-        ),
       ],
     );
   }
@@ -473,9 +486,7 @@ class _WorkoutDayCard extends StatelessWidget {
               ),
             ],
           ),
-
           const SizedBox(height: 16),
-
           ...exercises.map((exercise) {
             return _ExerciseTile(
               exercise: exercise as Map<String, dynamic>,

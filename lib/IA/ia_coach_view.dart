@@ -1,6 +1,7 @@
+import 'package:afermar3_tf_ipc/IA/ai_generated_workout_view.dart';
+import 'package:afermar3_tf_ipc/IA/saved_workouts_view.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/services/ai_chat_service.dart';
-import 'package:afermar3_tf_ipc/IA/ai_generated_workout_view.dart';
 import 'package:flutter/material.dart';
 
 class AiCoachView extends StatefulWidget {
@@ -169,6 +170,15 @@ class _AiCoachViewState extends State<AiCoachView> {
     _sendMessage();
   }
 
+  void _openSavedWorkouts() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const SavedWorkoutsView(),
+      ),
+    );
+  }
+
   void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 180), () {
       if (!_scrollController.hasClients) return;
@@ -203,7 +213,7 @@ class _AiCoachViewState extends State<AiCoachView> {
             padding: const EdgeInsets.all(8),
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              onTap: () {},
+              onTap: _openSavedWorkouts,
               child: Container(
                 width: 42,
                 height: 42,
@@ -213,7 +223,7 @@ class _AiCoachViewState extends State<AiCoachView> {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
-                  Icons.auto_awesome_rounded,
+                  Icons.bookmark_rounded,
                   color: Colors.white,
                   size: 22,
                 ),
