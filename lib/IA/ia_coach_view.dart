@@ -1,5 +1,6 @@
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/services/ai_chat_service.dart';
+import 'package:afermar3_tf_ipc/IA/ai_generated_workout_view.dart';
 import 'package:flutter/material.dart';
 
 class AiCoachView extends StatefulWidget {
@@ -138,9 +139,13 @@ class _AiCoachViewState extends State<AiCoachView> {
 
     switch (action) {
       case "Crear rutina":
-        _messageController.text =
-            "Créame una rutina completa y personalizada de 4 días por semana según mi perfil y mi objetivo actual. Incluye distribución semanal, ejercicios, series, repeticiones, descanso, calentamiento y progresión semanal.";
-        break;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AiGeneratedWorkoutView(),
+          ),
+        );
+        return;
 
       case "Ajustar dieta":
         _messageController.text =

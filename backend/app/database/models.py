@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.database.database import Base
@@ -100,3 +100,42 @@ class SleepAlarm(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="sleep_alarms")
+
+
+class Exercise(Base):
+    __tablename__ = "exercises"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    name = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    muscle_group = Column(String, nullable=False)
+    difficulty = Column(String, nullable=False)
+    equipment = Column(String, nullable=True)
+
+    description = Column(String, nullable=True)
+    instructions = Column(String, nullable=True)
+    image = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class SavedWorkout(Base):
+    __tablename__ = "saved_workouts"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    title = Column(String, nullable=False)
+    summary = Column(String, nullable=True)
+    goal = Column(String, nullable=True)
+    level = Column(String, nullable=True)
+
+    days_per_week = Column(Integer, nullable=True)
+    duration_minutes = Column(Integer, nullable=True)
+
+    content_json = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")

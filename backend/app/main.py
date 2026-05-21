@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.database import Base, engine
-from app.routers import auth_router, profile_router, ai_chat_router
+from app.routers import auth_router, profile_router, ai_chat_router, exercise_router,ai_workout_router, workout_plan_router 
 
 Base.metadata.create_all(bind=engine)
 
@@ -23,7 +23,9 @@ app.add_middleware(
 app.include_router(auth_router.router)
 app.include_router(profile_router.router)
 app.include_router(ai_chat_router.router)
-
+app.include_router(exercise_router.router)
+app.include_router(ai_workout_router.router)
+app.include_router(workout_plan_router.router)
 
 @app.get("/")
 def root():

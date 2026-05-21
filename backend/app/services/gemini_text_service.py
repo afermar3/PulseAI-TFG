@@ -1,6 +1,7 @@
 import os
-import re
+import time
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 from google import genai
@@ -20,48 +21,86 @@ def _get_client() -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
-def _clean_response(text: str) -> str:
-    cleaned = text.strip()
-
-    cleaned = cleaned.replace("###", "")
-    cleaned = cleaned.replace("##", "")
-    cleaned = cleaned.replace("#", "")
-
-    cleaned = cleaned.replace("**", "")
-    cleaned = cleaned.replace("__", "")
-    cleaned = cleaned.replace("*   *", "- ")
-    cleaned = cleaned.replace("*  *", "- ")
-    cleaned = cleaned.replace("* *", "- ")
-    cleaned = cleaned.replace("*   ", "- ")
-    cleaned = cleaned.replace("* ", "- ")
-    cleaned = cleaned.replace("*", "")
-
-    cleaned = cleaned.replace("---", "")
-
-    cleaned = re.sub(r"^\s*[-•]\s+", "- ", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"[ \t]+", " ", cleaned)
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-
-    return cleaned.strip()
-
-
 def generate_text_response(prompt: str) -> str:
     client = _get_client()
 
-    response = client.models.generate_content(
-        #model="gemini-2.5-flash",
-        model="gemini-2.5-flash-lite",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.4,
-            max_output_tokens=2200,
-            thinking_config=types.ThinkingConfig(
-                thinking_budget=0,
-            ),
-        ),
-    )
+    last_error = None
 
-    if not response.text:
-        raise RuntimeError("Gemini no ha devuelto respuesta.")
+    for attempt in range(2):
+        try:
+            response = client.models.generate_content(
+                #model="gemini-2.5-flash",
+                #model="gemini-2.5-flash-lite",
+                model="gemini-2.0-flash-lite",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.35,
+                    max_output_tokens=2200,
+                ),
+            )
 
-    return _clean_response(response.text)
+            if not response.text:
+                raise RuntimeError("Gemini no ha devuelto respuesta.")
+
+            return response.text.strip()
+
+        except Exception as e:
+            last_error = e
+            error_text = str(e)
+
+            if (
+                "503" in error_text
+                or "UNAVAILABLE" in error_text
+                or "high demand" in error_text
+            ):
+                time.sleep(2)
+                continue
+
+            raise e
+
+    raise last_error
+
+
+def generate_json_response(
+    prompt: str,
+    response_schema: Any,
+) -> str:
+    client = _get_client()
+
+    last_error = None
+
+    for attempt in range(2):
+        try:
+            response = client.models.generate_content(
+                #model="gemini-2.5-flash",
+                #model="gemini-2.5-flash-lite",
+                model="gemini-2.0-flash-lite",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.25,
+                    max_output_tokens=6000,
+                    response_mime_type="application/json",
+                    response_schema=response_schema,
+                ),
+            )
+
+            if not response.text:
+                raise RuntimeError("Gemini no ha devuelto JSON.")
+
+            return response.text.strip()
+
+        except Exception as e:
+            last_error = e
+            error_text = str(e)
+
+            if (
+                "503" in error_text
+                or "UNAVAILABLE" in error_text
+                or "high demand" in error_text
+            ):
+                time.sleep(2)
+                continue
+
+            raise e
+
+    raise last_error
