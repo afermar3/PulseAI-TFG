@@ -209,6 +209,46 @@ class _SavedWorkoutCard extends StatelessWidget {
     required this.onDelete,
   });
 
+  Map<String, dynamic> get content {
+    final rawContent = workout["content"];
+
+    if (rawContent is Map<String, dynamic>) {
+      return rawContent;
+    }
+
+    if (rawContent is Map) {
+      return Map<String, dynamic>.from(rawContent);
+    }
+
+    return {};
+  }
+
+  String get source {
+    final rawSource = workout["source"]?.toString() ??
+        content["source"]?.toString() ??
+        "";
+
+    if (rawSource.toUpperCase() == "MANUAL") {
+      return "MANUAL";
+    }
+
+    return "AI";
+  }
+
+  String get sourceLabel {
+    return source == "MANUAL" ? "Manual" : "IA";
+  }
+
+  IconData get sourceIcon {
+    return source == "MANUAL"
+        ? Icons.edit_note_rounded
+        : Icons.auto_awesome_rounded;
+  }
+
+  Color get sourceColor {
+    return source == "MANUAL" ? Colors.blueAccent : Colors.purpleAccent;
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = workout["title"]?.toString() ?? "Rutina guardada";
@@ -242,38 +282,24 @@ class _SavedWorkoutCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isActive) ...[
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _SourceTag(
+                  text: sourceLabel,
+                  icon: sourceIcon,
+                  color: sourceColor,
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.check_circle_rounded,
-                      color: Colors.green,
-                      size: 16,
-                    ),
-                    SizedBox(width: 6),
-                    Text(
-                      "Rutina activa",
-                      style: TextStyle(
-                        color: Colors.green,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                if (isActive)
+                  const _SourceTag(
+                    text: "Activa",
+                    icon: Icons.check_circle_rounded,
+                    color: Colors.green,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
             Row(
               children: [
                 Container(
@@ -283,8 +309,10 @@ class _SavedWorkoutCard extends StatelessWidget {
                     gradient: LinearGradient(colors: TColor.primerG),
                     borderRadius: BorderRadius.circular(18),
                   ),
-                  child: const Icon(
-                    Icons.fitness_center_rounded,
+                  child: Icon(
+                    source == "MANUAL"
+                        ? Icons.edit_note_rounded
+                        : Icons.auto_awesome_rounded,
                     color: Colors.white,
                     size: 28,
                   ),
@@ -355,6 +383,51 @@ class _SavedWorkoutCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SourceTag extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  final Color color;
+
+  const _SourceTag({
+    required this.text,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            color: color,
+            size: 16,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
       ),
     );
   }

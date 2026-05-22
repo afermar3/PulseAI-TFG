@@ -86,35 +86,42 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
     });
   }
 
-  void _openExerciseDetail(Map<String, dynamic> exercise) {
-    final exerciseName = exercise["exercise_name"]?.toString() ?? "Ejercicio";
+void _openExerciseDetail(Map<String, dynamic> exercise) {
+  final exerciseName = exercise["exercise_name"]?.toString() ??
+      exercise["name"]?.toString() ??
+      "Ejercicio";
 
-    final reps = exercise["reps"]?.toString() ?? "";
-    final sets = exercise["sets"]?.toString() ?? "";
-    final notes = exercise["notes"]?.toString() ?? "";
+  final reps = exercise["reps"]?.toString() ?? "";
+  final sets = exercise["sets"]?.toString() ?? "";
+  final notes = exercise["notes"]?.toString() ?? "";
 
-    final mappedExercise = {
-      "title": exerciseName,
-      "value": reps.isEmpty ? "12x" : reps,
-      "type": "reps",
-      "image": "assets/img/video_temp.png",
-      "description": notes.isEmpty
-          ? "Ejercicio incluido en tu rutina activa. Realízalo manteniendo una técnica correcta y adaptando la intensidad a tu nivel."
-          : notes,
-      "sets": sets,
-      "rest_seconds": exercise["rest_seconds"],
-      "exercise_id": exercise["exercise_id"],
-    };
+  final mappedExercise = {
+    "title": exerciseName,
+    "value": reps.isEmpty ? "12x" : reps,
+    "type": "reps",
+    "image": exercise["image"]?.toString() ?? "assets/img/video_temp.png",
+    "description": exercise["description"]?.toString() ??
+        (notes.isEmpty
+            ? "Ejercicio incluido en tu rutina activa. Realízalo manteniendo una técnica correcta y adaptando la intensidad a tu nivel."
+            : notes),
+    "sets": sets,
+    "rest_seconds": exercise["rest_seconds"],
+    "exercise_id": exercise["exercise_id"],
+    "notes": notes,
+    "muscle_group": exercise["muscle_group"] ?? "General",
+    "difficulty": exercise["difficulty"] ?? "Rutina",
+    "category": exercise["category"] ?? "Entrenamiento",
+  };
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ExercisesStepDetails(
-          eObj: mappedExercise,
-        ),
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => ExercisesStepDetails(
+        eObj: mappedExercise,
       ),
-    );
-  }
+    ),
+  );
+}
 
   Future<void> _finishWorkout() async {
     if (totalExercises == 0) {

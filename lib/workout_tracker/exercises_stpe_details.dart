@@ -57,7 +57,17 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
         widget.eObj["image"]?.toString() ?? "assets/img/video_temp.png";
 
     final String description = widget.eObj["description"]?.toString() ??
-        "Este ejercicio ayuda a mejorar la resistencia, la coordinación y el control corporal. Realízalo manteniendo una técnica correcta y adaptando la intensidad a tu nivel físico.";
+        "Ejercicio incluido en PulseAI. Realízalo manteniendo una técnica correcta y adaptando la intensidad a tu nivel físico.";
+
+    final String sets = widget.eObj["sets"]?.toString() ?? "-";
+    final String restSeconds = widget.eObj["rest_seconds"]?.toString() ?? "-";
+    final String muscleGroup =
+        widget.eObj["muscle_group"]?.toString() ?? "General";
+    final String difficulty =
+        widget.eObj["difficulty"]?.toString() ?? "Sin nivel";
+    final String category =
+        widget.eObj["category"]?.toString() ?? "Ejercicio";
+    final String notes = widget.eObj["notes"]?.toString() ?? "";
 
     return Scaffold(
       backgroundColor: TColor.white,
@@ -100,7 +110,7 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
               onTap: () {
-                // TODO: opciones del ejercicio: editar, eliminar, añadir a favoritos...
+                // Futuro: editar, eliminar, añadir a favoritos...
               },
               child: Container(
                 width: 42,
@@ -133,11 +143,24 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
                   title: title,
                   value: value,
                   type: type,
+                  difficulty: difficulty,
                 ),
                 const SizedBox(height: 20),
                 _buildStatsRow(
                   type: type,
                   value: value,
+                  sets: sets,
+                  restSeconds: restSeconds,
+                ),
+                const SizedBox(height: 26),
+                _buildExerciseInfoCard(
+                  muscleGroup: muscleGroup,
+                  category: category,
+                  difficulty: difficulty,
+                  sets: sets,
+                  reps: value,
+                  restSeconds: restSeconds,
+                  notes: notes,
                 ),
                 const SizedBox(height: 26),
                 _buildSectionHeader(
@@ -213,10 +236,6 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
                 title: "Guardar configuración",
                 elevation: 0,
                 onPressed: () {
-                  // TODO backend:
-                  // PATCH /exercise-settings/{exerciseId}
-                  // body: { repetitions: selectedRepetitions }
-
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
@@ -285,7 +304,7 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
           InkWell(
             borderRadius: BorderRadius.circular(35),
             onTap: () {
-              // TODO: reproducir vídeo real del ejercicio
+              // Futuro: reproducir vídeo real del ejercicio.
             },
             child: Container(
               width: 62,
@@ -310,6 +329,7 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
     required String title,
     required String value,
     required String type,
+    required String difficulty,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,7 +369,7 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
             borderRadius: BorderRadius.circular(18),
           ),
           child: Text(
-            "Básico",
+            difficulty,
             style: TextStyle(
               color: TColor.rojo,
               fontSize: 12,
@@ -364,6 +384,8 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
   Widget _buildStatsRow({
     required String type,
     required String value,
+    required String sets,
+    required String restSeconds,
   }) {
     return Row(
       children: [
@@ -375,22 +397,112 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
           ),
         ),
         const SizedBox(width: 12),
-        const Expanded(
+        Expanded(
           child: _StatCard(
-            icon: Icons.local_fire_department_rounded,
-            value: "45",
-            label: "Kcal",
+            icon: Icons.fitness_center_rounded,
+            value: sets,
+            label: "Series",
           ),
         ),
         const SizedBox(width: 12),
-        const Expanded(
+        Expanded(
           child: _StatCard(
-            icon: Icons.speed_rounded,
-            value: "Fácil",
-            label: "Nivel",
+            icon: Icons.timer_outlined,
+            value: restSeconds == "-" ? "-" : "${restSeconds}s",
+            label: "Descanso",
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildExerciseInfoCard({
+    required String muscleGroup,
+    required String category,
+    required String difficulty,
+    required String sets,
+    required String reps,
+    required String restSeconds,
+    required String notes,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: TColor.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Datos del ejercicio",
+            style: TextStyle(
+              color: TColor.black,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InfoChip(
+                icon: Icons.fitness_center_rounded,
+                text: muscleGroup,
+              ),
+              _InfoChip(
+                icon: Icons.category_rounded,
+                text: category,
+              ),
+              _InfoChip(
+                icon: Icons.speed_rounded,
+                text: difficulty,
+              ),
+              _InfoChip(
+                icon: Icons.repeat_rounded,
+                text: "$sets series",
+              ),
+              _InfoChip(
+                icon: Icons.timer_outlined,
+                text: restSeconds == "-" ? "Sin descanso" : "$restSeconds s",
+              ),
+            ],
+          ),
+          if (notes.trim().isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              "Notas de la rutina",
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              notes,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -518,6 +630,51 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
                 height: 1.35,
                 fontWeight: FontWeight.w600,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _InfoChip({
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (text.trim().isEmpty) return const SizedBox();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 7,
+      ),
+      decoration: BoxDecoration(
+        color: TColor.rojo.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            color: TColor.rojo,
+            size: 15,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              color: TColor.rojo,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
