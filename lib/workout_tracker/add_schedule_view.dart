@@ -1,3 +1,4 @@
+import 'package:afermar3_tf_ipc/services/workout_plan_service.dart';
 import 'package:flutter/material.dart';
 
 import '../../widgets/color_extension.dart';
@@ -20,24 +21,12 @@ class AddScheduleView extends StatefulWidget {
 class _AddScheduleViewState extends State<AddScheduleView> {
   late TimeOfDay selectedTime;
 
-  String selectedWorkout = "Upperbody";
-  String selectedDifficulty = "Beginner";
-  int selectedRepetitions = 12;
-  double selectedWeight = 0;
+  Map<String, dynamic>? activeWorkout;
+  List<Map<String, dynamic>> activeWorkoutDays = [];
+  Map<String, dynamic>? selectedDay;
 
-  final List<String> workoutOptions = [
-    "Fullbody",
-    "Upperbody",
-    "Lowerbody",
-    "Ab Workout",
-    "Cardio",
-  ];
-
-  final List<String> difficultyOptions = [
-    "Beginner",
-    "Intermediate",
-    "Advanced",
-  ];
+  bool isLoading = true;
+  String? errorMessage;
 
   @override
   void initState() {
@@ -48,6 +37,55 @@ class _AddScheduleViewState extends State<AddScheduleView> {
       hour: now.hour,
       minute: now.minute,
     );
+
+    _loadActiveWorkout();
+  }
+
+  Future<void> _loadActiveWorkout() async {
+    try {
+      final workout = await WorkoutPlanService.getActiveWorkoutPlan();
+
+      final content = workout?["content"];
+
+      List<Map<String, dynamic>> days = [];
+
+      if (content is Map && content["days"] is List) {
+        days = (content["days"] as List)
+            .map((item) {
+              if (item is Map<String, dynamic>) {
+                return item;
+              }
+
+              if (item is Map) {
+                return Map<String, dynamic>.from(item);
+              }
+
+              return <String, dynamic>{};
+            })
+            .where((item) => item.isNotEmpty)
+            .toList();
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        activeWorkout = workout;
+        activeWorkoutDays = days;
+        selectedDay = days.isNotEmpty ? days.first : null;
+        isLoading = false;
+        errorMessage = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        activeWorkout = null;
+        activeWorkoutDays = [];
+        selectedDay = null;
+        isLoading = false;
+        errorMessage = e.toString().replaceFirst("Exception: ", "");
+      });
+    }
   }
 
   String _formatTime(BuildContext context) {
@@ -62,26 +100,6 @@ class _AddScheduleViewState extends State<AddScheduleView> {
       selectedTime.hour,
       selectedTime.minute,
     );
-  }
-
-  String _formatDateForOldSchedule(DateTime date) {
-    final day = date.day.toString().padLeft(2, "0");
-    final month = date.month.toString().padLeft(2, "0");
-    final year = date.year.toString();
-
-    int hour = date.hour;
-    final minute = date.minute.toString().padLeft(2, "0");
-    final amPm = hour >= 12 ? "PM" : "AM";
-
-    if (hour == 0) {
-      hour = 12;
-    } else if (hour > 12) {
-      hour -= 12;
-    }
-
-    final hourText = hour.toString().padLeft(2, "0");
-
-    return "$day/$month/$year $hourText:$minute $amPm";
   }
 
   Future<void> _selectTime() async {
@@ -118,12 +136,40 @@ class _AddScheduleViewState extends State<AddScheduleView> {
     }
   }
 
-  void _showOptionPicker({
-    required String title,
-    required List<String> options,
-    required String currentValue,
-    required Function(String value) onSelected,
-  }) {
+  String _getDayTitle(Map<String, dynamic> day) {
+    final dayNumber = day["day_number"]?.toString() ?? "";
+    final name = day["name"]?.toString() ?? "Entrenamiento";
+
+    if (dayNumber.isEmpty) {
+      return name;
+    }
+
+    return "Día $dayNumber - $name";
+  }
+
+  int _getDayNumber(Map<String, dynamic> day) {
+    final value = day["day_number"];
+
+    if (value is int) return value;
+
+    return int.tryParse(value?.toString() ?? "") ?? 1;
+  }
+
+  int _getDurationMinutes() {
+    final value = activeWorkout?["duration_minutes"];
+
+    if (value is int) return value;
+
+    return int.tryParse(value?.toString() ?? "") ?? 45;
+  }
+
+  int _getEstimatedKcal() {
+    return _getDurationMinutes() * 6;
+  }
+
+  void _showWorkoutDayPicker() {
+    if (activeWorkoutDays.isEmpty) return;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -155,7 +201,7 @@ class _AddScheduleViewState extends State<AddScheduleView> {
                   children: [
                     Expanded(
                       child: Text(
-                        title,
+                        "Elegir día de rutina",
                         style: TextStyle(
                           color: TColor.black,
                           fontSize: 18,
@@ -175,55 +221,109 @@ class _AddScheduleViewState extends State<AddScheduleView> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                ...options.map((option) {
-                  final isSelected = option == currentValue;
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: activeWorkoutDays.length,
+                    itemBuilder: (context, index) {
+                      final day = activeWorkoutDays[index];
+                      final isSelected = selectedDay == day;
+                      final exercises = day["exercises"] as List? ?? [];
+                      final focus = day["focus"]?.toString() ?? "";
 
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(18),
-                    onTap: () {
-                      onSelected(option);
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 15,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? TColor.rojo.withOpacity(0.10)
-                            : Colors.grey.shade50,
+                      return InkWell(
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: isSelected
-                              ? TColor.rojo.withOpacity(0.25)
-                              : Colors.grey.shade100,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              option,
-                              style: TextStyle(
-                                color: isSelected ? TColor.rojo : TColor.black,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
+                        onTap: () {
+                          setState(() {
+                            selectedDay = day;
+                          });
+                          Navigator.pop(context);
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 15,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? TColor.rojo.withOpacity(0.10)
+                                : Colors.grey.shade50,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: isSelected
+                                  ? TColor.rojo.withOpacity(0.25)
+                                  : Colors.grey.shade100,
                             ),
                           ),
-                          if (isSelected)
-                            Icon(
-                              Icons.check_circle_rounded,
-                              color: TColor.rojo,
-                              size: 22,
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 38,
+                                height: 38,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? TColor.rojo.withOpacity(0.12)
+                                      : TColor.primaryColor1.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Text(
+                                  _getDayNumber(day).toString(),
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? TColor.rojo
+                                        : TColor.primaryColor1,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _getDayTitle(day),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: isSelected
+                                            ? TColor.rojo
+                                            : TColor.black,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      focus.isEmpty
+                                          ? "${exercises.length} ejercicios"
+                                          : "$focus · ${exercises.length} ejercicios",
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: TColor.gray,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isSelected)
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  color: TColor.rojo,
+                                  size: 22,
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -232,236 +332,42 @@ class _AddScheduleViewState extends State<AddScheduleView> {
     );
   }
 
-  void _showRepetitionPicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        int tempRepetitions = selectedRepetitions;
-
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              padding: const EdgeInsets.fromLTRB(22, 16, 22, 22),
-              decoration: BoxDecoration(
-                color: TColor.white,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(28),
-                  topRight: Radius.circular(28),
-                ),
-              ),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: TColor.gray.withOpacity(0.25),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            "Custom Repetitions",
-                            style: TextStyle(
-                              color: TColor.black,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          "$tempRepetitions reps",
-                          style: TextStyle(
-                            color: TColor.rojo,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    Slider(
-                      value: tempRepetitions.toDouble(),
-                      min: 1,
-                      max: 30,
-                      divisions: 29,
-                      activeColor: TColor.rojo,
-                      inactiveColor: TColor.rojo.withOpacity(0.15),
-                      onChanged: (value) {
-                        setModalState(() {
-                          tempRepetitions = value.round();
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            selectedRepetitions = tempRepetitions;
-                          });
-                          Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: TColor.rojo,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                        child: const Text(
-                          "Guardar repeticiones",
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showWeightPicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        double tempWeight = selectedWeight;
-
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              padding: const EdgeInsets.fromLTRB(22, 16, 22, 22),
-              decoration: BoxDecoration(
-                color: TColor.white,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(28),
-                  topRight: Radius.circular(28),
-                ),
-              ),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: TColor.gray.withOpacity(0.25),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            "Custom Weights",
-                            style: TextStyle(
-                              color: TColor.black,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          tempWeight == 0
-                              ? "Sin peso"
-                              : "${tempWeight.toStringAsFixed(1)} kg",
-                          style: TextStyle(
-                            color: TColor.rojo,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    Slider(
-                      value: tempWeight,
-                      min: 0,
-                      max: 80,
-                      divisions: 80,
-                      activeColor: TColor.rojo,
-                      inactiveColor: TColor.rojo.withOpacity(0.15),
-                      onChanged: (value) {
-                        setModalState(() {
-                          tempWeight = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            selectedWeight = tempWeight;
-                          });
-                          Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: TColor.rojo,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                        child: const Text(
-                          "Guardar peso",
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   void _saveSchedule() {
+    final day = selectedDay;
+
+    if (activeWorkout == null || day == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("No hay una rutina activa para programar"),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final selectedDateTime = _buildSelectedDateTime();
+
+    final workoutTitle =
+        activeWorkout?["title"]?.toString() ?? "Rutina activa";
+
+    final dayName = day["name"]?.toString() ?? "Entrenamiento";
+    final dayNumber = _getDayNumber(day);
+    final durationMinutes = _getDurationMinutes();
+    final estimatedKcal = _getEstimatedKcal();
 
     final newSchedule = {
       "id": DateTime.now().millisecondsSinceEpoch,
-      "name": selectedWorkout,
-      "category": selectedDifficulty == "Beginner"
-          ? "Básico"
-          : selectedDifficulty == "Intermediate"
-              ? "Medio"
-              : "Avanzado",
-      "duration": "32 min",
-      "kcal": "280 kcal",
+      "saved_workout_id": activeWorkout?["id"] as int?,
+      "name": workoutTitle,
+      "category": dayName,
+      "day_number": dayNumber,
+      "day_name": dayName,
+      "duration": "$durationMinutes min",
+      "duration_minutes": durationMinutes,
+      "kcal": "$estimatedKcal kcal",
       "start_time": selectedDateTime,
       "completed": false,
-      "difficulty": selectedDifficulty,
-      "repetitions": selectedRepetitions,
-      "weight": selectedWeight,
     };
 
     Navigator.pop(context, newSchedule);
@@ -498,7 +404,7 @@ class _AddScheduleViewState extends State<AddScheduleView> {
           ),
         ),
         title: Text(
-          "Add Schedule",
+          "Añadir a agenda",
           style: TextStyle(
             color: TColor.black,
             fontSize: 16,
@@ -508,7 +414,7 @@ class _AddScheduleViewState extends State<AddScheduleView> {
         actions: [
           InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: () {},
+            onTap: _loadActiveWorkout,
             child: Container(
               margin: const EdgeInsets.all(8),
               height: 40,
@@ -518,212 +424,516 @@ class _AddScheduleViewState extends State<AddScheduleView> {
                 color: TColor.lightGray,
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Image.asset(
-                "assets/img/more_btn.png",
-                width: 15,
-                height: 15,
-                fit: BoxFit.contain,
+              child: Icon(
+                Icons.refresh_rounded,
+                color: TColor.black,
+                size: 20,
               ),
             ),
           ),
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 15,
-                  horizontal: 25,
+        child: isLoading
+            ? Center(
+                child: CircularProgressIndicator(
+                  color: TColor.rojo,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _HeaderDateCard(
-                      dateText: dateToString(
-                        widget.date,
-                        formatStr: "E, dd MMMM yyyy",
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    Text(
-                      "Time",
-                      style: TextStyle(
-                        color: TColor.black,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(18),
-                      onTap: _selectTime,
-                      child: Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: TColor.lightGray,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.access_time_rounded,
-                              color: TColor.rojo,
-                              size: 28,
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
+              )
+            : errorMessage != null
+                ? _ScheduleLoadError(
+                    message: errorMessage!,
+                    onRetry: _loadActiveWorkout,
+                  )
+                : activeWorkoutDays.isEmpty
+                    ? _NoActiveWorkoutToSchedule(
+                        onCreateAI: () {
+                          Navigator.pop(context);
+                        },
+                      )
+                    : Column(
+                        children: [
+                          Expanded(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 15,
+                                horizontal: 25,
+                              ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    "Selected Time",
-                                    style: TextStyle(
-                                      color: TColor.black,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
+                                  _HeaderDateCard(
+                                    dateText: dateToString(
+                                      widget.date,
+                                      formatStr: "E, dd MMMM yyyy",
                                     ),
                                   ),
-                                  const SizedBox(height: 3),
+                                  const SizedBox(height: 22),
                                   Text(
-                                    "Tap to change workout time",
+                                    "Hora",
                                     style: TextStyle(
-                                      color: TColor.gray,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
+                                      color: TColor.black,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(18),
+                                    onTap: _selectTime,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(18),
+                                      decoration: BoxDecoration(
+                                        color: TColor.lightGray,
+                                        borderRadius: BorderRadius.circular(18),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.access_time_rounded,
+                                            color: TColor.rojo,
+                                            size: 28,
+                                          ),
+                                          const SizedBox(width: 14),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  "Hora seleccionada",
+                                                  style: TextStyle(
+                                                    color: TColor.black,
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  "Toca para cambiar la hora",
+                                                  style: TextStyle(
+                                                    color: TColor.gray,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          Text(
+                                            _formatTime(context),
+                                            style: TextStyle(
+                                              color: TColor.rojo,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w900,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  Text(
+                                    "Día de rutina",
+                                    style: TextStyle(
+                                      color: TColor.black,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  IconTitleNextRow(
+                                    icon: "assets/img/choose_workout.png",
+                                    title: "Elegir día",
+                                    time: selectedDay == null
+                                        ? "Seleccionar"
+                                        : _getDayTitle(selectedDay!),
+                                    color: TColor.lightGray,
+                                    onPressed: _showWorkoutDayPicker,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _SelectedDayPreview(
+                                    day: selectedDay,
+                                    durationMinutes: _getDurationMinutes(),
+                                    estimatedKcal: _getEstimatedKcal(),
+                                  ),
+                                  const SizedBox(height: 18),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: TColor.rojo.withOpacity(0.08),
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.info_outline_rounded,
+                                          color: TColor.rojo,
+                                          size: 24,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            "Este día de tu rutina activa se añadirá a la agenda. Podrás marcarlo como completado cuando lo realices.",
+                                            style: TextStyle(
+                                              color: TColor.gray,
+                                              fontSize: 12,
+                                              height: 1.35,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                            Text(
-                              _formatTime(context),
-                              style: TextStyle(
-                                color: TColor.rojo,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      "Details Workout",
-                      style: TextStyle(
-                        color: TColor.black,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    IconTitleNextRow(
-                      icon: "assets/img/choose_workout.png",
-                      title: "Choose Workout",
-                      time: selectedWorkout,
-                      color: TColor.lightGray,
-                      onPressed: () {
-                        _showOptionPicker(
-                          title: "Choose Workout",
-                          options: workoutOptions,
-                          currentValue: selectedWorkout,
-                          onSelected: (value) {
-                            setState(() {
-                              selectedWorkout = value;
-                            });
-                          },
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    IconTitleNextRow(
-                      icon: "assets/img/difficulity.png",
-                      title: "Difficulty",
-                      time: selectedDifficulty,
-                      color: TColor.lightGray,
-                      onPressed: () {
-                        _showOptionPicker(
-                          title: "Choose Difficulty",
-                          options: difficultyOptions,
-                          currentValue: selectedDifficulty,
-                          onSelected: (value) {
-                            setState(() {
-                              selectedDifficulty = value;
-                            });
-                          },
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    IconTitleNextRow(
-                      icon: "assets/img/repetitions.png",
-                      title: "Custom Repetitions",
-                      time: "$selectedRepetitions reps",
-                      color: TColor.lightGray,
-                      onPressed: _showRepetitionPicker,
-                    ),
-                    const SizedBox(height: 10),
-                    IconTitleNextRow(
-                      icon: "assets/img/repetitions.png",
-                      title: "Custom Weights",
-                      time: selectedWeight == 0
-                          ? "No weight"
-                          : "${selectedWeight.toStringAsFixed(1)} kg",
-                      color: TColor.lightGray,
-                      onPressed: _showWeightPicker,
-                    ),
-                    const SizedBox(height: 18),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: TColor.rojo.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline_rounded,
-                            color: TColor.rojo,
-                            size: 24,
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              "This schedule will be added to your workout agenda.",
-                              style: TextStyle(
-                                color: TColor.gray,
-                                fontSize: 12,
-                                height: 1.35,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          Container(
+                            padding: const EdgeInsets.fromLTRB(25, 12, 25, 20),
+                            decoration: BoxDecoration(
+                              color: TColor.white,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.06),
+                                  blurRadius: 14,
+                                  offset: const Offset(0, -5),
+                                ),
+                              ],
+                            ),
+                            child: RoundButton(
+                              title: "Guardar en agenda",
+                              onPressed: _saveSchedule,
                             ),
                           ),
                         ],
                       ),
+      ),
+    );
+  }
+}
+
+class _SelectedDayPreview extends StatelessWidget {
+  final Map<String, dynamic>? day;
+  final int durationMinutes;
+  final int estimatedKcal;
+
+  const _SelectedDayPreview({
+    required this.day,
+    required this.durationMinutes,
+    required this.estimatedKcal,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedDay = day;
+
+    if (selectedDay == null) {
+      return const SizedBox();
+    }
+
+    final dayName = selectedDay["name"]?.toString() ?? "Entrenamiento";
+    final focus = selectedDay["focus"]?.toString() ?? "";
+    final exercises = selectedDay["exercises"] as List? ?? [];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: TColor.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.045),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            dayName,
+            style: TextStyle(
+              color: TColor.black,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          if (focus.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text(
+              focus,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _PreviewStat(
+                  icon: Icons.fitness_center_rounded,
+                  value: exercises.length.toString(),
+                  label: "Ejercicios",
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _PreviewStat(
+                  icon: Icons.timer_outlined,
+                  value: "$durationMinutes",
+                  label: "Min",
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _PreviewStat(
+                  icon: Icons.local_fire_department_rounded,
+                  value: "$estimatedKcal",
+                  label: "Kcal",
+                ),
+              ),
+            ],
+          ),
+          if (exercises.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              "Ejercicios",
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...exercises.take(4).map((exercise) {
+              String name = "Ejercicio";
+
+              if (exercise is Map) {
+                name = exercise["exercise_name"]?.toString() ?? "Ejercicio";
+              }
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline_rounded,
+                      color: TColor.rojo,
+                      size: 17,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: TColor.gray,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ],
                 ),
+              );
+            }),
+            if (exercises.length > 4)
+              Text(
+                "+ ${exercises.length - 4} ejercicios más",
+                style: TextStyle(
+                  color: TColor.rojo,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewStat extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+
+  const _PreviewStat({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 78,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: TColor.rojo.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: TColor.rojo,
+              size: 22,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
               ),
             ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(25, 12, 25, 20),
-              decoration: BoxDecoration(
-                color: TColor.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 14,
-                    offset: const Offset(0, -5),
-                  ),
-                ],
+            const SizedBox(height: 1),
+            Text(
+              label,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
               ),
-              child: RoundButton(
-                title: "Save",
-                onPressed: _saveSchedule,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScheduleLoadError extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ScheduleLoadError({
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              color: TColor.rojo,
+              size: 52,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "No se pudo cargar la rutina activa",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
               ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton(
+              onPressed: onRetry,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TColor.rojo,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: const Text("Reintentar"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoActiveWorkoutToSchedule extends StatelessWidget {
+  final VoidCallback onCreateAI;
+
+  const _NoActiveWorkoutToSchedule({
+    required this.onCreateAI,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.fitness_center_rounded,
+              color: TColor.rojo,
+              size: 58,
+            ),
+            const SizedBox(height: 18),
+            Text(
+              "No tienes una rutina activa",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Primero crea o activa una rutina para poder programarla en tu agenda.",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton(
+              onPressed: onCreateAI,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TColor.rojo,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: const Text("Volver"),
             ),
           ],
         ),

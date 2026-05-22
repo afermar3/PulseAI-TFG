@@ -1,8 +1,13 @@
 import 'package:afermar3_tf_ipc/IA/ai_generated_workout_view.dart';
 import 'package:afermar3_tf_ipc/IA/saved_workouts_view.dart';
+import 'package:afermar3_tf_ipc/services/scheduled_workout_service.dart';
 import 'package:afermar3_tf_ipc/services/workout_plan_service.dart';
+import 'package:afermar3_tf_ipc/services/workout_session_service.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
-import 'package:afermar3_tf_ipc/workout_tracker/workout_detail_view.dart';
+import 'package:afermar3_tf_ipc/workout_tracker/active_workout_day_view.dart';
+import 'package:afermar3_tf_ipc/workout_tracker/exercise_library_view.dart';
+import 'package:afermar3_tf_ipc/workout_tracker/manual_workout_builder_view.dart';
+import 'package:afermar3_tf_ipc/workout_tracker/workout_schedule_view.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
@@ -17,80 +22,18 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
   Map<String, dynamic>? activeWorkout;
   bool isLoadingActiveWorkout = true;
 
-  final List<Map<String, dynamic>> scheduledWorkouts = [
-    {
-      "id": 1,
-      "image": "assets/img/Workout1.png",
-      "title": "Full Body",
-      "subtitle": "Fuerza y resistencia",
-      "time": "Hoy, 15:00",
-      "duration": "32 min",
-      "exercises": "11 ejercicios",
-      "kcal": "280 kcal",
-      "enabled": true,
-    },
-    {
-      "id": 2,
-      "image": "assets/img/Workout2.png",
-      "title": "Tren superior",
-      "subtitle": "Espalda, pecho y brazos",
-      "time": "Mañana, 18:30",
-      "duration": "40 min",
-      "exercises": "12 ejercicios",
-      "kcal": "330 kcal",
-      "enabled": true,
-    },
-  ];
+  Map<String, dynamic>? workoutSummary;
+  bool isLoadingSummary = true;
 
-  final List<Map<String, dynamic>> workoutPlans = [
-    {
-      "id": 101,
-      "image": "assets/img/what_1.png",
-      "title": "Full Body",
-      "subtitle": "Entrenamiento completo",
-      "exercises": "11 ejercicios",
-      "time": "32 min",
-      "level": "Medio",
-      "kcal": "280 kcal",
-      "progress": 0.68,
-    },
-    {
-      "id": 102,
-      "image": "assets/img/what_2.png",
-      "title": "Tren inferior",
-      "subtitle": "Piernas y glúteos",
-      "exercises": "12 ejercicios",
-      "time": "40 min",
-      "level": "Intenso",
-      "kcal": "360 kcal",
-      "progress": 0.45,
-    },
-    {
-      "id": 103,
-      "image": "assets/img/what_3.png",
-      "title": "Abdominales",
-      "subtitle": "Core y estabilidad",
-      "exercises": "14 ejercicios",
-      "time": "20 min",
-      "level": "Básico",
-      "kcal": "180 kcal",
-      "progress": 0.82,
-    },
-  ];
-
-  int selectedFilter = 0;
-
-  final List<String> filters = [
-    "Todos",
-    "Fuerza",
-    "Cardio",
-    "Core",
-  ];
+  List<Map<String, dynamic>> upcomingScheduledWorkouts = [];
+  bool isLoadingScheduledWorkouts = true;
 
   @override
   void initState() {
     super.initState();
     _loadActiveWorkout();
+    _loadWorkoutSummary();
+    _loadUpcomingScheduledWorkouts();
   }
 
   Future<void> _loadActiveWorkout() async {
@@ -113,6 +56,102 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
     }
   }
 
+  Future<void> _loadWorkoutSummary() async {
+    try {
+      final summary = await WorkoutSessionService.getWorkoutSummary();
+
+      if (!mounted) return;
+
+      setState(() {
+        workoutSummary = summary;
+        isLoadingSummary = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        workoutSummary = {
+          "total_sessions": 0,
+          "total_minutes": 0,
+          "estimated_kcal": 0,
+          "total_completed_exercises": 0,
+        };
+        isLoadingSummary = false;
+      });
+    }
+  }
+
+  Future<void> _loadUpcomingScheduledWorkouts() async {
+    try {
+      final result = await ScheduledWorkoutService.getMyScheduledWorkouts();
+
+      final now = DateTime.now();
+
+      final workouts = result.map((item) {
+        final map = Map<String, dynamic>.from(item as Map);
+
+        DateTime scheduledDate;
+
+        try {
+          scheduledDate = DateTime.parse(map["scheduled_date"].toString());
+        } catch (_) {
+          scheduledDate = now;
+        }
+
+        final durationMinutes = map["duration_minutes"] as int? ?? 45;
+        final estimatedKcal = durationMinutes * 6;
+
+        return {
+          "id": map["id"],
+          "saved_workout_id": map["saved_workout_id"],
+          "completed_session_id": map["completed_session_id"],
+          "title": map["workout_title"]?.toString() ?? "Entrenamiento",
+          "subtitle": map["day_name"]?.toString() ?? "Rutina",
+          "day_number": map["day_number"],
+          "time": _formatUpcomingDate(scheduledDate),
+          "scheduled_date": scheduledDate,
+          "duration": "$durationMinutes min",
+          "kcal": "$estimatedKcal kcal",
+          "completed": map["completed"] == true,
+        };
+      }).where((item) {
+        final date = item["scheduled_date"] as DateTime;
+        final completed = item["completed"] as bool? ?? false;
+
+        return !completed &&
+            date.isAfter(now.subtract(const Duration(minutes: 1)));
+      }).toList();
+
+      workouts.sort((a, b) {
+        final dateA = a["scheduled_date"] as DateTime;
+        final dateB = b["scheduled_date"] as DateTime;
+        return dateA.compareTo(dateB);
+      });
+
+      if (!mounted) return;
+
+      setState(() {
+        upcomingScheduledWorkouts = workouts.take(3).toList();
+        isLoadingScheduledWorkouts = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        upcomingScheduledWorkouts = [];
+        isLoadingScheduledWorkouts = false;
+      });
+    }
+  }
+
+  Future<void> _refreshWorkoutData() async {
+    await Future.wait([
+      _loadActiveWorkout(),
+      _loadWorkoutSummary(),
+      _loadUpcomingScheduledWorkouts(),
+    ]);
+  }
+
   Future<void> _openSavedWorkouts() async {
     await Navigator.push(
       context,
@@ -121,10 +160,10 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
       ),
     );
 
-    _loadActiveWorkout();
+    _refreshWorkoutData();
   }
 
-  void _openActiveWorkout() {
+  Future<void> _openActiveWorkout() async {
     final workout = activeWorkout;
 
     if (workout == null) {
@@ -139,17 +178,130 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
       return;
     }
 
-    Navigator.push(
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => AiGeneratedWorkoutView(
-          initialWorkout: content,
-          isSavedWorkout: true,
+        builder: (context) => ActiveWorkoutDayView(
+          workout: content,
           savedWorkoutId: workout["id"] as int?,
-          isActiveWorkout: true,
+          dayIndex: 0,
         ),
       ),
     );
+
+    if (result == true) {
+      _refreshWorkoutData();
+    }
+  }
+
+  List<Map<String, dynamic>> _getActiveWorkoutDays() {
+    final content = activeWorkout?["content"];
+
+    if (content is! Map) return [];
+
+    final days = content["days"];
+
+    if (days is! List) return [];
+
+    return days
+        .map((item) {
+          if (item is Map<String, dynamic>) {
+            return item;
+          }
+
+          if (item is Map) {
+            return Map<String, dynamic>.from(item);
+          }
+
+          return <String, dynamic>{};
+        })
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+
+  Future<void> _openActiveWorkoutDay(int dayIndex) async {
+    final workout = activeWorkout;
+
+    if (workout == null) {
+      _openSavedWorkouts();
+      return;
+    }
+
+    final content = workout["content"] as Map<String, dynamic>?;
+
+    if (content == null) {
+      _openSavedWorkouts();
+      return;
+    }
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ActiveWorkoutDayView(
+          workout: content,
+          savedWorkoutId: workout["id"] as int?,
+          dayIndex: dayIndex,
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _refreshWorkoutData();
+    }
+  }
+
+  Future<void> _openManualWorkoutBuilder() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ManualWorkoutBuilderView(),
+      ),
+    );
+
+    if (result == true) {
+      _refreshWorkoutData();
+    }
+  }
+
+  void _openExerciseLibrary() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ExerciseLibraryView(),
+      ),
+    );
+  }
+
+  Future<void> _openSchedule() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const WorkoutScheduleView(),
+      ),
+    );
+
+    _refreshWorkoutData();
+  }
+
+  String _formatUpcomingDate(DateTime date) {
+    final now = DateTime.now();
+
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final eventDay = DateTime(date.year, date.month, date.day);
+
+    final hour = date.hour.toString().padLeft(2, "0");
+    final minute = date.minute.toString().padLeft(2, "0");
+
+    if (eventDay == today) {
+      return "Hoy, $hour:$minute";
+    }
+
+    if (eventDay == tomorrow) {
+      return "Mañana, $hour:$minute";
+    }
+
+    return "${date.day.toString().padLeft(2, "0")}/${date.month.toString().padLeft(2, "0")}, $hour:$minute";
   }
 
   @override
@@ -247,7 +399,9 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "4 entrenamientos completados · 1.150 kcal",
+                          isLoadingSummary
+                              ? "Cargando progreso..."
+                              : "${workoutSummary?["total_sessions"] ?? 0} entrenamientos completados · ${workoutSummary?["estimated_kcal"] ?? 0} kcal",
                           style: TextStyle(
                             color: TColor.white.withOpacity(0.78),
                             fontSize: 13,
@@ -296,68 +450,13 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                     const SizedBox(height: 26),
                     _buildSectionHeader(
                       title: "Próximos entrenamientos",
-                      actionText: "Mis rutinas",
-                      onTap: _openSavedWorkouts,
+                      actionText: "Agenda",
+                      onTap: _openSchedule,
                     ),
                     const SizedBox(height: 12),
-                    ListView.builder(
-                      padding: EdgeInsets.zero,
-                      physics: const NeverScrollableScrollPhysics(),
-                      shrinkWrap: true,
-                      itemCount: scheduledWorkouts.length,
-                      itemBuilder: (context, index) {
-                        final workout = scheduledWorkouts[index];
-
-                        return _ScheduledWorkoutCard(
-                          workout: workout,
-                          onChanged: (value) {
-                            setState(() {
-                              workout["enabled"] = value;
-                            });
-                          },
-                        );
-                      },
-                    ),
+                    _buildUpcomingScheduledWorkouts(),
                     const SizedBox(height: 24),
-                    _buildSectionHeader(
-                      title: "¿Qué quieres entrenar?",
-                      actionText: "IA",
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const AiGeneratedWorkoutView(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _buildFilterChips(),
-                    const SizedBox(height: 16),
-                    ListView.builder(
-                      padding: EdgeInsets.zero,
-                      physics: const NeverScrollableScrollPhysics(),
-                      shrinkWrap: true,
-                      itemCount: workoutPlans.length,
-                      itemBuilder: (context, index) {
-                        final workout = workoutPlans[index];
-
-                        return _WorkoutPlanCard(
-                          workout: workout,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => WorkoutDetailView(
-                                  dObj: workout,
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
+                    _buildTrainingOptionsSection(),
                   ],
                 ),
               ),
@@ -369,12 +468,16 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
   }
 
   Widget _buildSummaryCards() {
+    final totalSessions = workoutSummary?["total_sessions"]?.toString() ?? "0";
+    final estimatedKcal = workoutSummary?["estimated_kcal"]?.toString() ?? "0";
+    final totalMinutes = workoutSummary?["total_minutes"]?.toString() ?? "0";
+
     return Row(
       children: [
         Expanded(
           child: _SummaryCard(
             icon: Icons.fitness_center_rounded,
-            value: "4",
+            value: isLoadingSummary ? "..." : totalSessions,
             label: "Sesiones",
           ),
         ),
@@ -382,7 +485,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
         Expanded(
           child: _SummaryCard(
             icon: Icons.local_fire_department_rounded,
-            value: "1150",
+            value: isLoadingSummary ? "..." : estimatedKcal,
             label: "Kcal",
           ),
         ),
@@ -390,7 +493,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
         Expanded(
           child: _SummaryCard(
             icon: Icons.timer_outlined,
-            value: "132",
+            value: isLoadingSummary ? "..." : totalMinutes,
             label: "Min",
           ),
         ),
@@ -515,6 +618,202 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
     );
   }
 
+  Widget _buildUpcomingScheduledWorkouts() {
+    if (isLoadingScheduledWorkouts) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: TColor.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: Colors.grey.shade100),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: TColor.primaryColor1,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "Cargando próximos entrenamientos...",
+                style: TextStyle(
+                  color: TColor.gray,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (upcomingScheduledWorkouts.isEmpty) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: _openSchedule,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: TColor.primaryColor1.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: TColor.primaryColor1.withOpacity(0.10),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: TColor.white,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(
+                  Icons.event_available_rounded,
+                  color: TColor.primaryColor1,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "No tienes entrenamientos programados",
+                      style: TextStyle(
+                        color: TColor.black,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Entra en la agenda y programa los días de tu rutina.",
+                      style: TextStyle(
+                        color: TColor.gray,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: TColor.gray,
+                size: 16,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.zero,
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      itemCount: upcomingScheduledWorkouts.length,
+      itemBuilder: (context, index) {
+        final workout = upcomingScheduledWorkouts[index];
+
+        return _UpcomingScheduledWorkoutCard(
+          workout: workout,
+          onTap: _openSchedule,
+        );
+      },
+    );
+  }
+
+  Widget _buildTrainingOptionsSection() {
+    final activeDays = _getActiveWorkoutDays();
+    final hasActiveDays = activeDays.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          title: hasActiveDays
+              ? "Días de tu rutina activa"
+              : "¿Qué quieres entrenar?",
+          actionText: "IA",
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const AiGeneratedWorkoutView(),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 12),
+        if (hasActiveDays) ...[
+          ListView.builder(
+            padding: EdgeInsets.zero,
+            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            itemCount: activeDays.length,
+            itemBuilder: (context, index) {
+              final day = activeDays[index];
+
+              return _ActiveWorkoutDayCard(
+                day: day,
+                index: index,
+                onTap: () => _openActiveWorkoutDay(index),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+        ] else ...[
+          _NoActiveWorkoutCard(
+            onCreateWithAI: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AiGeneratedWorkoutView(),
+                ),
+              );
+            },
+            onCreateManual: _openManualWorkoutBuilder,
+            onExploreExercises: _openExerciseLibrary,
+          ),
+          const SizedBox(height: 14),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: _TrainingActionCard(
+                icon: Icons.edit_note_rounded,
+                title: "Crear rutina manual",
+                subtitle: "Elige ejercicios y organiza tus días",
+                onTap: _openManualWorkoutBuilder,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _TrainingActionCard(
+                icon: Icons.search_rounded,
+                title: "Explorar ejercicios",
+                subtitle: "Consulta ejercicios disponibles",
+                onTap: _openExerciseLibrary,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   Widget _buildSectionHeader({
     required String title,
     required String actionText,
@@ -544,49 +843,6 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildFilterChips() {
-    return SizedBox(
-      height: 38,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: filters.length,
-        itemBuilder: (context, index) {
-          final isSelected = selectedFilter == index;
-
-          return Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () {
-                setState(() {
-                  selectedFilter = index;
-                });
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color:
-                      isSelected ? TColor.primaryColor1 : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  filters[index],
-                  style: TextStyle(
-                    color: isSelected ? TColor.white : TColor.gray,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 }
@@ -779,125 +1035,129 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-class _ScheduledWorkoutCard extends StatelessWidget {
-  final Map<String, dynamic> workout;
-  final Function(bool value) onChanged;
-
-  const _ScheduledWorkoutCard({
-    required this.workout,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = workout["enabled"] as bool? ?? false;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: TColor.white,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: Colors.grey.shade100,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            child: Image.asset(
-              workout["image"].toString(),
-              width: 58,
-              height: 58,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  width: 58,
-                  height: 58,
-                  color: Colors.grey.shade100,
-                  child: Icon(
-                    Icons.fitness_center_rounded,
-                    color: TColor.primaryColor1,
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  workout["title"].toString(),
-                  style: TextStyle(
-                    color: TColor.black,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  workout["time"].toString(),
-                  style: TextStyle(
-                    color: TColor.gray,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  "${workout["duration"]} · ${workout["kcal"]}",
-                  style: TextStyle(
-                    color: TColor.primaryColor1,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: enabled,
-            activeColor: TColor.primaryColor1,
-            onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WorkoutPlanCard extends StatelessWidget {
+class _UpcomingScheduledWorkoutCard extends StatelessWidget {
   final Map<String, dynamic> workout;
   final VoidCallback onTap;
 
-  const _WorkoutPlanCard({
+  const _UpcomingScheduledWorkoutCard({
     required this.workout,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final progress = workout["progress"] as double? ?? 0.0;
-
     return InkWell(
-      borderRadius: BorderRadius.circular(26),
+      borderRadius: BorderRadius.circular(22),
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: TColor.white,
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: Colors.grey.shade100,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: TColor.primaryColor1.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(
+                Icons.event_note_rounded,
+                color: TColor.primaryColor1,
+                size: 30,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    workout["title"].toString(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: TColor.black,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    workout["time"].toString(),
+                    style: TextStyle(
+                      color: TColor.gray,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    "${workout["duration"]} · ${workout["kcal"]}",
+                    style: TextStyle(
+                      color: TColor.primaryColor1,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: TColor.gray,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActiveWorkoutDayCard extends StatelessWidget {
+  final Map<String, dynamic> day;
+  final int index;
+  final VoidCallback onTap;
+
+  const _ActiveWorkoutDayCard({
+    required this.day,
+    required this.index,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dayNumber = day["day_number"]?.toString() ?? "${index + 1}";
+    final dayName = day["name"]?.toString() ?? "Entrenamiento";
+    final focus = day["focus"]?.toString() ?? "Rutina activa";
+
+    final exercises = day["exercises"] as List? ?? [];
+    final exercisesText = "${exercises.length} ejercicios";
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: TColor.white,
+          borderRadius: BorderRadius.circular(24),
           border: Border.all(
             color: Colors.grey.shade100,
           ),
@@ -911,25 +1171,21 @@ class _WorkoutPlanCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(22),
-              child: Image.asset(
-                workout["image"].toString(),
-                width: 82,
-                height: 82,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    width: 82,
-                    height: 82,
-                    color: Colors.grey.shade100,
-                    child: Icon(
-                      Icons.fitness_center_rounded,
-                      color: TColor.primaryColor1,
-                      size: 30,
-                    ),
-                  );
-                },
+            Container(
+              width: 52,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: TColor.primaryColor1.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Text(
+                dayNumber,
+                style: TextStyle(
+                  color: TColor.primaryColor1,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
             const SizedBox(width: 14),
@@ -938,42 +1194,33 @@ class _WorkoutPlanCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    workout["title"].toString(),
+                    dayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: TColor.black,
                       fontSize: 16,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    workout["subtitle"].toString(),
+                    focus,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: TColor.gray,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      _MiniTag(text: workout["exercises"].toString()),
-                      _MiniTag(text: workout["time"].toString()),
-                      _MiniTag(text: workout["level"].toString()),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      minHeight: 6,
-                      backgroundColor: Colors.grey.shade100,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        TColor.primaryColor1,
-                      ),
+                  const SizedBox(height: 7),
+                  Text(
+                    exercisesText,
+                    style: TextStyle(
+                      color: TColor.primaryColor1,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ],
@@ -992,31 +1239,195 @@ class _WorkoutPlanCard extends StatelessWidget {
   }
 }
 
-class _MiniTag extends StatelessWidget {
-  final String text;
+class _TrainingActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
 
-  const _MiniTag({
-    required this.text,
+  const _TrainingActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(22),
+      onTap: onTap,
+      child: Container(
+        height: 116,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: TColor.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: Colors.grey.shade100,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              icon,
+              color: TColor.primaryColor1,
+              size: 26,
+            ),
+            const Spacer(),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 10.5,
+                height: 1.25,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoActiveWorkoutCard extends StatelessWidget {
+  final VoidCallback onCreateWithAI;
+  final VoidCallback onCreateManual;
+  final VoidCallback onExploreExercises;
+
+  const _NoActiveWorkoutCard({
+    required this.onCreateWithAI,
+    required this.onCreateManual,
+    required this.onExploreExercises,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 9,
-        vertical: 5,
-      ),
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: TColor.primaryColor1.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: TColor.primaryColor1,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: TColor.primaryColor1.withOpacity(0.10),
         ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: TColor.white,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(
+                  Icons.fitness_center_rounded,
+                  color: TColor.primaryColor1,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "No tienes una rutina activa",
+                      style: TextStyle(
+                        color: TColor.black,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Crea una rutina con IA o manualmente para empezar.",
+                      style: TextStyle(
+                        color: TColor.gray,
+                        fontSize: 12,
+                        height: 1.3,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onCreateWithAI,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: TColor.primaryColor1,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    "Crear con IA",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onCreateManual,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: TColor.primaryColor1,
+                    side: BorderSide(
+                      color: TColor.primaryColor1,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    "Manual",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

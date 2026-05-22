@@ -1,3 +1,4 @@
+import 'package:afermar3_tf_ipc/services/scheduled_workout_service.dart';
 import 'package:afermar3_tf_ipc/widgets/calendar_agenda/lib/calendar_agenda.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:afermar3_tf_ipc/widgets/common.dart';
@@ -18,46 +19,82 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
 
   late DateTime _selectedDate;
 
-  List<Map<String, dynamic>> eventArr = [
-    {
-      "id": 1,
-      "name": "Full Body",
-      "category": "Fuerza",
-      "duration": "32 min",
-      "kcal": "280 kcal",
-      "start_time": DateTime.now().copyWith(hour: 7, minute: 30),
-      "completed": false,
-    },
-    {
-      "id": 2,
-      "name": "Tren superior",
-      "category": "Fuerza",
-      "duration": "40 min",
-      "kcal": "330 kcal",
-      "start_time": DateTime.now().copyWith(hour: 12, minute: 0),
-      "completed": false,
-    },
-    {
-      "id": 3,
-      "name": "Abdominales",
-      "category": "Core",
-      "duration": "20 min",
-      "kcal": "180 kcal",
-      "start_time": DateTime.now().add(const Duration(days: 1)).copyWith(
-            hour: 18,
-            minute: 30,
-          ),
-      "completed": false,
-    },
-  ];
-
+  List<Map<String, dynamic>> eventArr = [];
   List<Map<String, dynamic>> selectedDayEvents = [];
+
+  bool isLoading = true;
+  String? errorMessage;
 
   @override
   void initState() {
     super.initState();
     _selectedDate = DateTime.now();
-    _loadEventsForSelectedDay(refresh: false);
+    _loadScheduledWorkouts();
+  }
+
+  Future<void> _loadScheduledWorkouts() async {
+    try {
+      final result = await ScheduledWorkoutService.getMyScheduledWorkouts();
+
+      final events = result.map((item) {
+        return _mapScheduledWorkoutToEvent(
+          Map<String, dynamic>.from(item as Map),
+        );
+      }).toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        eventArr = events;
+        isLoading = false;
+        errorMessage = null;
+        _loadEventsForSelectedDay(refresh: false);
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+        errorMessage = e.toString().replaceFirst("Exception: ", "");
+      });
+    }
+  }
+
+  Map<String, dynamic> _mapScheduledWorkoutToEvent(
+    Map<String, dynamic> item,
+  ) {
+    final rawDate = item["scheduled_date"]?.toString();
+
+    DateTime parsedDate;
+
+    try {
+      parsedDate = DateTime.parse(rawDate ?? "");
+    } catch (_) {
+      parsedDate = DateTime.now();
+    }
+
+    final durationMinutes = item["duration_minutes"] as int? ?? 45;
+    final estimatedKcal = durationMinutes * 6;
+
+    return {
+      "id": item["id"],
+      "saved_workout_id": item["saved_workout_id"],
+      "completed_session_id": item["completed_session_id"],
+      "name": item["workout_title"]?.toString() ?? "Entrenamiento",
+      "category": item["day_name"]?.toString() ?? "Rutina",
+      "day_number": item["day_number"],
+      "day_name": item["day_name"],
+      "duration": "$durationMinutes min",
+      "duration_minutes": durationMinutes,
+      "kcal": "$estimatedKcal kcal",
+      "start_time": parsedDate,
+      "completed": item["completed"] == true,
+    };
+  }
+
+  int _extractMinutes(String text) {
+    final match = RegExp(r'\d+').firstMatch(text);
+    return int.tryParse(match?.group(0) ?? "") ?? 45;
   }
 
   void _loadEventsForSelectedDay({bool refresh = true}) {
@@ -109,58 +146,136 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
         return;
       }
 
+      try {
+        final startTime = newEvent["start_time"] as DateTime;
+
+        final durationMinutes = newEvent["duration_minutes"] as int? ??
+            _extractMinutes(newEvent["duration"]?.toString() ?? "45 min");
+
+        final created = await ScheduledWorkoutService.createScheduledWorkout(
+          savedWorkoutId: newEvent["saved_workout_id"] as int?,
+          workoutTitle: newEvent["name"]?.toString() ?? "Entrenamiento",
+          dayNumber: newEvent["day_number"] as int?,
+          dayName: newEvent["day_name"]?.toString() ??
+              newEvent["category"]?.toString() ??
+              newEvent["name"]?.toString(),
+          scheduledDate: startTime,
+          durationMinutes: durationMinutes,
+        );
+
+        final createdEvent = _mapScheduledWorkoutToEvent(created);
+
+        if (!mounted) return;
+
+        setState(() {
+          eventArr.add(createdEvent);
+          _loadEventsForSelectedDay(refresh: false);
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("${createdEvent["name"]} añadido a la agenda"),
+            backgroundColor: TColor.rojo,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } catch (e) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString().replaceFirst("Exception: ", ""),
+            ),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _markWorkoutDone(Map<String, dynamic> event) async {
+    Navigator.pop(context);
+
+    try {
+      final updated = await ScheduledWorkoutService.completeScheduledWorkout(
+        event["id"] as int,
+      );
+
+      final updatedEvent = _mapScheduledWorkoutToEvent(updated);
+
+      if (!mounted) return;
+
       setState(() {
-        eventArr.add(newEvent);
+        final index = eventArr.indexWhere(
+          (item) => item["id"] == updatedEvent["id"],
+        );
+
+        if (index != -1) {
+          eventArr[index] = updatedEvent;
+        }
+
         _loadEventsForSelectedDay(refresh: false);
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("${newEvent["name"]} añadido a la agenda"),
-          backgroundColor: TColor.rojo,
+          content: Text("${updatedEvent["name"]} marcado como completado"),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
   }
 
-  void _markWorkoutDone(Map<String, dynamic> event) {
+  Future<void> _deleteWorkout(Map<String, dynamic> event) async {
     Navigator.pop(context);
 
-    setState(() {
-      final index = eventArr.indexWhere((item) => item["id"] == event["id"]);
+    try {
+      await ScheduledWorkoutService.deleteScheduledWorkout(
+        event["id"] as int,
+      );
 
-      if (index != -1) {
-        eventArr[index]["completed"] = true;
-      }
+      if (!mounted) return;
 
-      _loadEventsForSelectedDay(refresh: false);
-    });
+      setState(() {
+        eventArr.removeWhere((item) => item["id"] == event["id"]);
+        _loadEventsForSelectedDay(refresh: false);
+      });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("${event["name"]} marcado como completado"),
-        backgroundColor: Colors.green,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("${event["name"]} eliminado"),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
 
-  void _deleteWorkout(Map<String, dynamic> event) {
-    Navigator.pop(context);
-
-    setState(() {
-      eventArr.removeWhere((item) => item["id"] == event["id"]);
-      _loadEventsForSelectedDay(refresh: false);
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("${event["name"]} eliminado"),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _openWorkoutDetail(Map<String, dynamic> event) {
@@ -234,7 +349,7 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
             padding: const EdgeInsets.all(8),
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              onTap: () {},
+              onTap: _loadScheduledWorkouts,
               child: Container(
                 width: 42,
                 height: 42,
@@ -244,7 +359,7 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  Icons.more_horiz_rounded,
+                  Icons.refresh_rounded,
                   color: TColor.black,
                   size: 22,
                 ),
@@ -253,149 +368,169 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          CalendarAgenda(
-            controller: _calendarAgendaControllerAppBar,
-            appbar: false,
-            selectedDayPosition: SelectedDayPosition.center,
-            leading: IconButton(
-              onPressed: () {},
-              icon: Image.asset(
-                "assets/img/ArrowLeft.png",
-                width: 15,
-                height: 15,
+      body: isLoading
+          ? Center(
+              child: CircularProgressIndicator(
+                color: TColor.rojo,
               ),
-            ),
-            training: IconButton(
-              onPressed: () {},
-              icon: Image.asset(
-                "assets/img/ArrowRight.png",
-                width: 15,
-                height: 15,
-              ),
-            ),
-            weekDay: WeekDay.short,
-            dayNameFontSize: 12,
-            dayNumberFontSize: 16,
-            dayBGColor: Colors.grey.withOpacity(0.12),
-            titleSpaceBetween: 15,
-            backgroundColor: Colors.transparent,
-            fullCalendarScroll: FullCalendarScroll.horizontal,
-            fullCalendarDay: WeekDay.short,
-            selectedDateColor: Colors.white,
-            dateColor: Colors.black,
-            locale: 'es',
-            initialDate: DateTime.now(),
-            calendarEventColor: TColor.primaryColor2,
-            firstDate: DateTime.now().subtract(const Duration(days: 140)),
-            lastDate: DateTime.now().add(const Duration(days: 90)),
-            events: eventArr
-                .where((event) => event["start_time"] is DateTime)
-                .map((event) => event["start_time"] as DateTime)
-                .toList(),
-            onDateSelected: (date) {
-              setState(() {
-                _selectedDate = date;
-                _loadEventsForSelectedDay(refresh: false);
-              });
-            },
-            selectedDayLogo: Container(
-              width: double.maxFinite,
-              height: double.maxFinite,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: TColor.primaryG,
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-                borderRadius: BorderRadius.circular(10.0),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 12, 22, 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _formatSelectedDate(_selectedDate),
-                    style: TextStyle(
-                      color: TColor.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
+            )
+          : errorMessage != null
+              ? _ScheduleErrorView(
+                  message: errorMessage!,
+                  onRetry: _loadScheduledWorkouts,
+                )
+              : Column(
+                  children: [
+                    CalendarAgenda(
+                      controller: _calendarAgendaControllerAppBar,
+                      appbar: false,
+                      selectedDayPosition: SelectedDayPosition.center,
+                      leading: IconButton(
+                        onPressed: () {},
+                        icon: Image.asset(
+                          "assets/img/ArrowLeft.png",
+                          width: 15,
+                          height: 15,
+                        ),
+                      ),
+                      training: IconButton(
+                        onPressed: () {},
+                        icon: Image.asset(
+                          "assets/img/ArrowRight.png",
+                          width: 15,
+                          height: 15,
+                        ),
+                      ),
+                      weekDay: WeekDay.short,
+                      dayNameFontSize: 12,
+                      dayNumberFontSize: 16,
+                      dayBGColor: Colors.grey.withOpacity(0.12),
+                      titleSpaceBetween: 15,
+                      backgroundColor: Colors.transparent,
+                      fullCalendarScroll: FullCalendarScroll.horizontal,
+                      fullCalendarDay: WeekDay.short,
+                      selectedDateColor: Colors.white,
+                      dateColor: Colors.black,
+                      locale: 'es',
+                      initialDate: DateTime.now(),
+                      calendarEventColor: TColor.primaryColor2,
+                      firstDate: DateTime.now().subtract(
+                        const Duration(days: 140),
+                      ),
+                      lastDate: DateTime.now().add(
+                        const Duration(days: 90),
+                      ),
+                      events: eventArr
+                          .where((event) => event["start_time"] is DateTime)
+                          .map((event) => event["start_time"] as DateTime)
+                          .toList(),
+                      onDateSelected: (date) {
+                        setState(() {
+                          _selectedDate = date;
+                          _loadEventsForSelectedDay(refresh: false);
+                        });
+                      },
+                      selectedDayLogo: Container(
+                        width: double.maxFinite,
+                        height: double.maxFinite,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: TColor.primaryG,
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                          borderRadius: BorderRadius.circular(10.0),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: TColor.primaryColor1.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Text(
-                    "${selectedDayEvents.length} entrenamientos",
-                    style: TextStyle(
-                      color: TColor.primaryColor1,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(22, 12, 22, 10),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _formatSelectedDate(_selectedDate),
+                              style: TextStyle(
+                                color: TColor.black,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: TColor.primaryColor1.withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Text(
+                              "${selectedDayEvents.length} entrenamientos",
+                              style: TextStyle(
+                                color: TColor.primaryColor1,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: selectedDayEvents.isEmpty
-                ? _EmptyScheduleView(
-                    onAdd: _openAddSchedule,
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(22, 8, 22, 110),
-                    itemCount: selectedDayEvents.length,
-                    itemBuilder: (context, index) {
-                      final event = selectedDayEvents[index];
+                    Expanded(
+                      child: selectedDayEvents.isEmpty
+                          ? _EmptyScheduleView(
+                              onAdd: _openAddSchedule,
+                            )
+                          : ListView.builder(
+                              padding:
+                                  const EdgeInsets.fromLTRB(22, 8, 22, 110),
+                              itemCount: selectedDayEvents.length,
+                              itemBuilder: (context, index) {
+                                final event = selectedDayEvents[index];
 
-                      return _ScheduleWorkoutCard(
-                        event: event,
-                        time: _formatTime(event["start_time"] as DateTime),
-                        onTap: () {
-                          _openWorkoutDetail(event);
-                        },
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-      floatingActionButton: InkWell(
-        borderRadius: BorderRadius.circular(28),
-        onTap: _openAddSchedule,
-        child: Container(
-          width: 58,
-          height: 58,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: TColor.primaryG),
-            borderRadius: BorderRadius.circular(29),
-            boxShadow: [
-              BoxShadow(
-                color: TColor.primaryColor1.withOpacity(0.35),
-                blurRadius: 16,
-                offset: const Offset(0, 7),
+                                return _ScheduleWorkoutCard(
+                                  event: event,
+                                  time: _formatTime(
+                                    event["start_time"] as DateTime,
+                                  ),
+                                  onTap: () {
+                                    _openWorkoutDetail(event);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+      floatingActionButton: isLoading || errorMessage != null
+          ? null
+          : InkWell(
+              borderRadius: BorderRadius.circular(28),
+              onTap: _openAddSchedule,
+              child: Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: TColor.primaryG),
+                  borderRadius: BorderRadius.circular(29),
+                  boxShadow: [
+                    BoxShadow(
+                      color: TColor.primaryColor1.withOpacity(0.35),
+                      blurRadius: 16,
+                      offset: const Offset(0, 7),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.add_rounded,
+                  size: 28,
+                  color: TColor.white,
+                ),
               ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.add_rounded,
-            size: 28,
-            color: TColor.white,
-          ),
-        ),
-      ),
+            ),
     );
   }
 }
@@ -425,7 +560,8 @@ class _ScheduleWorkoutCard extends StatelessWidget {
           color: TColor.white,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: Colors.grey.shade100,
+            color: completed ? Colors.green : Colors.grey.shade100,
+            width: completed ? 1.4 : 1,
           ),
           boxShadow: [
             BoxShadow(
@@ -493,6 +629,27 @@ class _ScheduleWorkoutCard extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
+                      if (completed) ...[
+                        const SizedBox(width: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.10),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Text(
+                            "Completado",
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],
@@ -810,6 +967,68 @@ class _EmptyScheduleView extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ScheduleErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ScheduleErrorView({
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              color: TColor.rojo,
+              size: 52,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "No se pudo cargar la agenda",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton(
+              onPressed: onRetry,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TColor.rojo,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: const Text("Reintentar"),
+            ),
+          ],
+        ),
       ),
     );
   }

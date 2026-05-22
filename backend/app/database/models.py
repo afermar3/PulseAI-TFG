@@ -141,3 +141,48 @@ class SavedWorkout(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+class WorkoutSession(Base):
+    __tablename__ = "workout_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    saved_workout_id = Column(Integer, ForeignKey("saved_workouts.id"), nullable=True)
+
+    workout_title = Column(String, nullable=False)
+    day_number = Column(Integer, nullable=True)
+    day_name = Column(String, nullable=True)
+
+    total_exercises = Column(Integer, default=0)
+    completed_exercises = Column(Integer, default=0)
+    duration_minutes = Column(Integer, nullable=True)
+
+    completed_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    saved_workout = relationship("SavedWorkout")
+
+class ScheduledWorkout(Base):
+    __tablename__ = "scheduled_workouts"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    saved_workout_id = Column(Integer, ForeignKey("saved_workouts.id"), nullable=True)
+    completed_session_id = Column(Integer, ForeignKey("workout_sessions.id"), nullable=True)
+
+    workout_title = Column(String, nullable=False)
+    day_number = Column(Integer, nullable=True)
+    day_name = Column(String, nullable=True)
+
+    scheduled_date = Column(DateTime, nullable=False)
+
+    duration_minutes = Column(Integer, nullable=True)
+    completed = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    saved_workout = relationship("SavedWorkout")
+    completed_session = relationship("WorkoutSession")
