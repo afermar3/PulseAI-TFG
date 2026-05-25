@@ -172,7 +172,7 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
         scheduledWorkoutId: null,
         dayNumber: currentDayNumber,
         exerciseIndex: i,
-        exerciseId: _parseExerciseId(exercise["exercise_id"]),
+        exerciseId: _parseExerciseId(exercise["exercise_id"] ?? exercise["id"]),
         exerciseName: _getExerciseName(exercise),
         completed: true,
       );
@@ -275,7 +275,7 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
         scheduledWorkoutId: null,
         dayNumber: currentDayNumber,
         exerciseIndex: index,
-        exerciseId: _parseExerciseId(exercise["exercise_id"]),
+        exerciseId: _parseExerciseId(exercise["exercise_id"] ?? exercise["id"]),
         exerciseName: _getExerciseName(exercise),
         completed: newCompletedValue,
       );
@@ -313,6 +313,7 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
 
     final mappedExercise = {
       "title": exerciseName,
+      "name": exerciseName,
       "value": reps.isEmpty ? "12x" : reps,
       "type": "reps",
       "image": exercise["image"]?.toString() ?? "assets/img/video_temp.png",
@@ -320,9 +321,11 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
           (notes.isEmpty
               ? "Ejercicio incluido en tu rutina activa. Realízalo manteniendo una técnica correcta y adaptando la intensidad a tu nivel."
               : notes),
+      "instructions": exercise["instructions"],
+      "equipment": exercise["equipment"],
       "sets": sets,
       "rest_seconds": exercise["rest_seconds"],
-      "exercise_id": exercise["exercise_id"],
+      "exercise_id": exercise["exercise_id"] ?? exercise["id"],
       "notes": notes,
       "muscle_group": exercise["muscle_group"] ?? "General",
       "difficulty": exercise["difficulty"] ?? "Rutina",

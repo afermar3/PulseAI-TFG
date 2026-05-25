@@ -1,4 +1,5 @@
 import 'package:afermar3_tf_ipc/common_widget/round_button.dart';
+import 'package:afermar3_tf_ipc/services/exercise_service.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -19,7 +20,10 @@ class ExercisesStepDetails extends StatefulWidget {
 class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
   int selectedRepetitions = 12;
 
-  final List<Map<String, dynamic>> stepArr = [
+  Map<String, dynamic>? exerciseDetails;
+  bool isLoadingDetails = false;
+
+  final List<Map<String, dynamic>> fallbackSteps = [
     {
       "no": "01",
       "title": "Coloca bien la postura",
@@ -47,27 +51,135 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    selectedRepetitions = _extractFirstNumber(
+      widget.eObj["value"]?.toString() ?? "12",
+    );
+    _loadExerciseDetailsIfNeeded();
+  }
+
+  int? _parseInt(dynamic value) {
+    if (value == null) return null;
+
+    if (value is int) return value;
+
+    return int.tryParse(value.toString());
+  }
+
+  int _extractFirstNumber(String text) {
+    final match = RegExp(r'\d+').firstMatch(text);
+    return int.tryParse(match?.group(0) ?? "") ?? 12;
+  }
+
+  String _getValue(String key, String fallback) {
+    final fromDetails = exerciseDetails?[key]?.toString();
+
+    if (fromDetails != null && fromDetails.trim().isNotEmpty) {
+      return fromDetails;
+    }
+
+    final fromObj = widget.eObj[key]?.toString();
+
+    if (fromObj != null && fromObj.trim().isNotEmpty) {
+      return fromObj;
+    }
+
+    return fallback;
+  }
+
+  Future<void> _loadExerciseDetailsIfNeeded() async {
+    final exerciseId = _parseInt(
+      widget.eObj["exercise_id"] ?? widget.eObj["id"],
+    );
+
+    if (exerciseId == null) return;
+
+    setState(() {
+      isLoadingDetails = true;
+    });
+
+    try {
+      final details = await ExerciseService.getExerciseById(exerciseId);
+
+      if (!mounted) return;
+
+      setState(() {
+        exerciseDetails = Map<String, dynamic>.from(details);
+        isLoadingDetails = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoadingDetails = false;
+      });
+    }
+  }
+
+  List<Map<String, dynamic>> _buildStepsFromInstructions(String instructions) {
+    final cleaned = instructions.trim();
+
+    if (cleaned.isEmpty) {
+      return fallbackSteps;
+    }
+
+    final parts = cleaned
+        .split(RegExp(r'[\n\r]+|(?<=\.)\s+|;'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+
+    if (parts.isEmpty) {
+      return fallbackSteps;
+    }
+
+    return List.generate(parts.length, (index) {
+      final number = (index + 1).toString().padLeft(2, "0");
+
+      return {
+        "no": number,
+        "title": "Paso ${index + 1}",
+        "detail": parts[index],
+      };
+    });
+  }
+
+  bool _isNetworkImage(String image) {
+    return image.startsWith("http://") || image.startsWith("https://");
+  }
+
+  @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context).size;
 
-    final String title = widget.eObj["title"]?.toString() ?? "Ejercicio";
+    final String title = _getValue("name", "").isNotEmpty
+        ? _getValue("name", "Ejercicio")
+        : widget.eObj["title"]?.toString() ?? "Ejercicio";
+
     final String value = widget.eObj["value"]?.toString() ?? "12x";
     final String type = widget.eObj["type"]?.toString() ?? "reps";
-    final String image =
-        widget.eObj["image"]?.toString() ?? "assets/img/video_temp.png";
 
-    final String description = widget.eObj["description"]?.toString() ??
-        "Ejercicio incluido en PulseAI. Realízalo manteniendo una técnica correcta y adaptando la intensidad a tu nivel físico.";
+    final String image = _getValue("image", "assets/img/video_temp.png");
+
+    final String description = _getValue(
+      "description",
+      "Ejercicio incluido en PulseAI. Realízalo manteniendo una técnica correcta y adaptando la intensidad a tu nivel físico.",
+    );
+
+    final String instructions = _getValue("instructions", "");
 
     final String sets = widget.eObj["sets"]?.toString() ?? "-";
     final String restSeconds = widget.eObj["rest_seconds"]?.toString() ?? "-";
-    final String muscleGroup =
-        widget.eObj["muscle_group"]?.toString() ?? "General";
-    final String difficulty =
-        widget.eObj["difficulty"]?.toString() ?? "Sin nivel";
-    final String category =
-        widget.eObj["category"]?.toString() ?? "Ejercicio";
+
+    final String muscleGroup = _getValue("muscle_group", "General");
+    final String difficulty = _getValue("difficulty", "Sin nivel");
+    final String category = _getValue("category", "Ejercicio");
+    final String equipment = _getValue("equipment", "Sin material específico");
+
     final String notes = widget.eObj["notes"]?.toString() ?? "";
+
+    final steps = _buildStepsFromInstructions(instructions);
 
     return Scaffold(
       backgroundColor: TColor.white,
@@ -107,25 +219,28 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
         actions: [
           Padding(
             padding: const EdgeInsets.all(8),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: () {
-                // Futuro: editar, eliminar, añadir a favoritos...
-              },
-              child: Container(
-                width: 42,
-                height: 42,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: TColor.lightGray,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  Icons.more_horiz_rounded,
-                  color: TColor.black,
-                  size: 22,
-                ),
+            child: Container(
+              width: 42,
+              height: 42,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: TColor.lightGray,
+                borderRadius: BorderRadius.circular(14),
               ),
+              child: isLoadingDetails
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: TColor.rojo,
+                      ),
+                    )
+                  : Icon(
+                      Icons.info_outline_rounded,
+                      color: TColor.black,
+                      size: 22,
+                    ),
             ),
           ),
         ],
@@ -157,6 +272,7 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
                   muscleGroup: muscleGroup,
                   category: category,
                   difficulty: difficulty,
+                  equipment: equipment,
                   sets: sets,
                   reps: value,
                   restSeconds: restSeconds,
@@ -195,32 +311,36 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
                 const SizedBox(height: 26),
                 _buildSectionHeader(
                   title: "Cómo hacerlo",
-                  actionText: "${stepArr.length} pasos",
+                  actionText: steps.length == 1 ? "1 paso" : "${steps.length} pasos",
                 ),
                 const SizedBox(height: 12),
                 ListView.builder(
                   padding: EdgeInsets.zero,
                   physics: const NeverScrollableScrollPhysics(),
                   shrinkWrap: true,
-                  itemCount: stepArr.length,
+                  itemCount: steps.length,
                   itemBuilder: (context, index) {
-                    final step = stepArr[index];
+                    final step = steps[index];
 
                     return _StepCard(
                       step: step,
-                      isLast: index == stepArr.length - 1,
+                      isLast: index == steps.length - 1,
                     );
                   },
                 ),
                 const SizedBox(height: 26),
                 _buildSectionHeader(
-                  title: type == "time"
-                      ? "Duración personalizada"
-                      : "Repeticiones personalizadas",
+                  title: "Configuración de la rutina",
                   actionText: "",
                 ),
                 const SizedBox(height: 12),
-                _buildPicker(type),
+                _buildRoutineConfigCard(
+                  type: type,
+                  value: value,
+                  sets: sets,
+                  restSeconds: restSeconds,
+                  notes: notes,
+                ),
                 const SizedBox(height: 20),
                 _buildAdviceCard(),
               ],
@@ -233,20 +353,10 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
             child: SafeArea(
               top: false,
               child: RoundButton(
-                title: "Guardar configuración",
+                title: "Entendido",
                 elevation: 0,
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        type == "time"
-                            ? "Duración guardada correctamente"
-                            : "Repeticiones guardadas correctamente",
-                      ),
-                      backgroundColor: TColor.rojo,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+                  Navigator.pop(context);
                 },
               ),
             ),
@@ -280,20 +390,35 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(26),
-            child: Image.asset(
-              image,
-              width: double.infinity,
-              height: double.infinity,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                return Image.asset(
-                  "assets/img/video_temp.png",
-                  width: double.infinity,
-                  height: double.infinity,
-                  fit: BoxFit.contain,
-                );
-              },
-            ),
+            child: _isNetworkImage(image)
+                ? Image.network(
+                    image,
+                    width: double.infinity,
+                    height: double.infinity,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Image.asset(
+                        "assets/img/video_temp.png",
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.contain,
+                      );
+                    },
+                  )
+                : Image.asset(
+                    image,
+                    width: double.infinity,
+                    height: double.infinity,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Image.asset(
+                        "assets/img/video_temp.png",
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.contain,
+                      );
+                    },
+                  ),
           ),
           Container(
             decoration: BoxDecoration(
@@ -304,7 +429,15 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
           InkWell(
             borderRadius: BorderRadius.circular(35),
             onTap: () {
-              // Futuro: reproducir vídeo real del ejercicio.
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text(
+                    "Vídeo del ejercicio disponible próximamente",
+                  ),
+                  backgroundColor: TColor.rojo,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
             },
             child: Container(
               width: 62,
@@ -420,6 +553,7 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
     required String muscleGroup,
     required String category,
     required String difficulty,
+    required String equipment,
     required String sets,
     required String reps,
     required String restSeconds,
@@ -471,6 +605,10 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
                 text: difficulty,
               ),
               _InfoChip(
+                icon: Icons.handyman_rounded,
+                text: equipment,
+              ),
+              _InfoChip(
                 icon: Icons.repeat_rounded,
                 text: "$sets series",
               ),
@@ -491,6 +629,81 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
               ),
             ),
             const SizedBox(height: 6),
+            Text(
+              notes,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoutineConfigCard({
+    required String type,
+    required String value,
+    required String sets,
+    required String restSeconds,
+    required String notes,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: TColor.primaryColor1.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: TColor.primaryColor1.withOpacity(0.10),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Datos asignados en esta rutina",
+            style: TextStyle(
+              color: TColor.black,
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _MiniRoutineBox(
+                  icon: Icons.repeat_rounded,
+                  value: sets,
+                  label: "Series",
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MiniRoutineBox(
+                  icon: type == "time"
+                      ? Icons.timer_outlined
+                      : Icons.fitness_center_rounded,
+                  value: value,
+                  label: type == "time" ? "Tiempo" : "Reps",
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MiniRoutineBox(
+                  icon: Icons.timelapse_rounded,
+                  value: restSeconds == "-" ? "-" : "${restSeconds}s",
+                  label: "Descanso",
+                ),
+              ),
+            ],
+          ),
+          if (notes.trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
             Text(
               notes,
               style: TextStyle(
@@ -535,76 +748,6 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
     );
   }
 
-  Widget _buildPicker(String type) {
-    return Container(
-      height: 160,
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: Colors.grey.shade100,
-        ),
-      ),
-      child: CupertinoPicker.builder(
-        itemExtent: 42,
-        selectionOverlay: Container(
-          width: double.infinity,
-          height: 42,
-          decoration: BoxDecoration(
-            border: Border(
-              top: BorderSide(
-                color: TColor.gray.withOpacity(0.18),
-                width: 1,
-              ),
-              bottom: BorderSide(
-                color: TColor.gray.withOpacity(0.18),
-                width: 1,
-              ),
-            ),
-          ),
-        ),
-        onSelectedItemChanged: (index) {
-          setState(() {
-            selectedRepetitions = index + 1;
-          });
-        },
-        childCount: type == "time" ? 30 : 60,
-        itemBuilder: (context, index) {
-          final value = index + 1;
-
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                type == "time" ? Icons.timer_outlined : Icons.repeat_rounded,
-                color: TColor.rojo,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                type == "time" ? "$value min" : "$value repeticiones",
-                style: TextStyle(
-                  color: TColor.black,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                "· ${(value * 4).clamp(5, 240)} kcal aprox.",
-                style: TextStyle(
-                  color: TColor.gray,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   Widget _buildAdviceCard() {
     return Container(
       width: double.infinity,
@@ -633,6 +776,61 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MiniRoutineBox extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+
+  const _MiniRoutineBox({
+    required this.icon,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 78,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: TColor.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: TColor.primaryColor1,
+              size: 22,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              value,
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                color: TColor.gray,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
