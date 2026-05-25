@@ -2,8 +2,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database.database import Base, engine
-from app.routers import auth_router, profile_router, ai_chat_router, exercise_router,ai_workout_router, workout_plan_router, workout_session_router, scheduled_workout_router
-
+from app.routers import (
+    auth_router,
+    profile_router,
+    ai_chat_router,
+    exercise_router,
+    ai_workout_router,
+    workout_plan_router,
+    workout_session_router,
+    scheduled_workout_router,
+    workout_progress_router,
+)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -28,6 +37,8 @@ app.include_router(ai_workout_router.router)
 app.include_router(workout_plan_router.router)
 app.include_router(workout_session_router.router)
 app.include_router(scheduled_workout_router.router)
+app.include_router(workout_progress_router.router)
+
 
 @app.get("/")
 def root():

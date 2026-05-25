@@ -1,4 +1,5 @@
 import 'package:afermar3_tf_ipc/common_widget/round_button.dart';
+import 'package:afermar3_tf_ipc/services/workout_progress_service.dart';
 import 'package:afermar3_tf_ipc/services/workout_session_service.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:afermar3_tf_ipc/workout_tracker/exercises_stpe_details.dart';
@@ -24,6 +25,13 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
   final Set<int> completedExercises = {};
 
   bool isSavingSession = false;
+  bool isLoadingProgress = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExerciseProgress();
+  }
 
   Map<String, dynamic>? get currentDay {
     final days = widget.workout["days"] as List? ?? [];
@@ -42,6 +50,18 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
     }
 
     return null;
+  }
+
+  int? get currentDayNumber {
+    final day = currentDay;
+
+    if (day == null) return null;
+
+    final value = day["day_number"];
+
+    if (value is int) return value;
+
+    return int.tryParse(value?.toString() ?? "");
   }
 
   List<Map<String, dynamic>> get exercises {
@@ -76,52 +96,154 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
     return completedCount / totalExercises;
   }
 
-  void _toggleExercise(int index) {
-    setState(() {
-      if (completedExercises.contains(index)) {
-        completedExercises.remove(index);
-      } else {
-        completedExercises.add(index);
-      }
-    });
+  int? _parseExerciseId(dynamic value) {
+    if (value == null) return null;
+
+    if (value is int) return value;
+
+    return int.tryParse(value.toString());
   }
 
-void _openExerciseDetail(Map<String, dynamic> exercise) {
-  final exerciseName = exercise["exercise_name"]?.toString() ??
-      exercise["name"]?.toString() ??
-      "Ejercicio";
+  String _getExerciseName(Map<String, dynamic> exercise) {
+    return exercise["exercise_name"]?.toString() ??
+        exercise["name"]?.toString() ??
+        "Ejercicio";
+  }
 
-  final reps = exercise["reps"]?.toString() ?? "";
-  final sets = exercise["sets"]?.toString() ?? "";
-  final notes = exercise["notes"]?.toString() ?? "";
+  Future<void> _loadExerciseProgress() async {
+    try {
+      final progress = await WorkoutProgressService.getDayProgress(
+        savedWorkoutId: widget.savedWorkoutId,
+        scheduledWorkoutId: null,
+        dayNumber: currentDayNumber,
+      );
 
-  final mappedExercise = {
-    "title": exerciseName,
-    "value": reps.isEmpty ? "12x" : reps,
-    "type": "reps",
-    "image": exercise["image"]?.toString() ?? "assets/img/video_temp.png",
-    "description": exercise["description"]?.toString() ??
-        (notes.isEmpty
-            ? "Ejercicio incluido en tu rutina activa. Realízalo manteniendo una técnica correcta y adaptando la intensidad a tu nivel."
-            : notes),
-    "sets": sets,
-    "rest_seconds": exercise["rest_seconds"],
-    "exercise_id": exercise["exercise_id"],
-    "notes": notes,
-    "muscle_group": exercise["muscle_group"] ?? "General",
-    "difficulty": exercise["difficulty"] ?? "Rutina",
-    "category": exercise["category"] ?? "Entrenamiento",
-  };
+      final completedIndexesRaw = progress["completed_exercise_indexes"];
 
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => ExercisesStepDetails(
-        eObj: mappedExercise,
+      final loadedIndexes = <int>{};
+
+      if (completedIndexesRaw is List) {
+        for (final item in completedIndexesRaw) {
+          final parsed = int.tryParse(item.toString());
+
+          if (parsed != null && parsed >= 0 && parsed < totalExercises) {
+            loadedIndexes.add(parsed);
+          }
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        completedExercises
+          ..clear()
+          ..addAll(loadedIndexes);
+        isLoadingProgress = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoadingProgress = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleExercise(int index) async {
+    if (index < 0 || index >= exercises.length) return;
+
+    final exercise = exercises[index];
+
+    final wasCompleted = completedExercises.contains(index);
+    final newCompletedValue = !wasCompleted;
+
+    setState(() {
+      if (newCompletedValue) {
+        completedExercises.add(index);
+      } else {
+        completedExercises.remove(index);
+      }
+    });
+
+    try {
+      await WorkoutProgressService.toggleExerciseProgress(
+        savedWorkoutId: widget.savedWorkoutId,
+        scheduledWorkoutId: null,
+        dayNumber: currentDayNumber,
+        exerciseIndex: index,
+        exerciseId: _parseExerciseId(exercise["exercise_id"]),
+        exerciseName: _getExerciseName(exercise),
+        completed: newCompletedValue,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        if (wasCompleted) {
+          completedExercises.add(index);
+        } else {
+          completedExercises.remove(index);
+        }
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _openExerciseDetail(Map<String, dynamic> exercise) {
+    final exerciseName = exercise["exercise_name"]?.toString() ??
+        exercise["name"]?.toString() ??
+        "Ejercicio";
+
+    final reps = exercise["reps"]?.toString() ?? "";
+    final sets = exercise["sets"]?.toString() ?? "";
+    final notes = exercise["notes"]?.toString() ?? "";
+
+    final mappedExercise = {
+      "title": exerciseName,
+      "value": reps.isEmpty ? "12x" : reps,
+      "type": "reps",
+      "image": exercise["image"]?.toString() ?? "assets/img/video_temp.png",
+      "description": exercise["description"]?.toString() ??
+          (notes.isEmpty
+              ? "Ejercicio incluido en tu rutina activa. Realízalo manteniendo una técnica correcta y adaptando la intensidad a tu nivel."
+              : notes),
+      "sets": sets,
+      "rest_seconds": exercise["rest_seconds"],
+      "exercise_id": exercise["exercise_id"],
+      "notes": notes,
+      "muscle_group": exercise["muscle_group"] ?? "General",
+      "difficulty": exercise["difficulty"] ?? "Rutina",
+      "category": exercise["category"] ?? "Entrenamiento",
+    };
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ExercisesStepDetails(
+          eObj: mappedExercise,
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Future<void> _finishWorkout() async {
     if (totalExercises == 0) {
@@ -412,25 +534,7 @@ void _openExerciseDetail(Map<String, dynamic> exercise) {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        ListView.builder(
-                          padding: EdgeInsets.zero,
-                          physics: const NeverScrollableScrollPhysics(),
-                          shrinkWrap: true,
-                          itemCount: exercises.length,
-                          itemBuilder: (context, index) {
-                            final exercise = exercises[index];
-                            final completed =
-                                completedExercises.contains(index);
-
-                            return _ActiveExerciseCard(
-                              exercise: exercise,
-                              index: index,
-                              completed: completed,
-                              onToggle: () => _toggleExercise(index),
-                              onTap: () => _openExerciseDetail(exercise),
-                            );
-                          },
-                        ),
+                        _buildExercisesList(),
                         const SizedBox(height: 24),
                         _buildAdviceCard(),
                       ],
@@ -458,6 +562,86 @@ void _openExerciseDetail(Map<String, dynamic> exercise) {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildExercisesList() {
+    if (isLoadingProgress) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: TColor.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: Colors.grey.shade100,
+          ),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: TColor.primaryColor1,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "Cargando progreso de ejercicios...",
+                style: TextStyle(
+                  color: TColor.gray,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (exercises.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: TColor.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: Colors.grey.shade100,
+          ),
+        ),
+        child: Text(
+          "No hay ejercicios en este día.",
+          style: TextStyle(
+            color: TColor.gray,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.zero,
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      itemCount: exercises.length,
+      itemBuilder: (context, index) {
+        final exercise = exercises[index];
+        final completed = completedExercises.contains(index);
+
+        return _ActiveExerciseCard(
+          exercise: exercise,
+          index: index,
+          completed: completed,
+          onToggle: () => _toggleExercise(index),
+          onTap: () => _openExerciseDetail(exercise),
+        );
+      },
     );
   }
 
@@ -680,7 +864,9 @@ class _ActiveExerciseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final exerciseName = exercise["exercise_name"]?.toString() ?? "Ejercicio";
+    final exerciseName = exercise["exercise_name"]?.toString() ??
+        exercise["name"]?.toString() ??
+        "Ejercicio";
     final sets = exercise["sets"]?.toString() ?? "-";
     final reps = exercise["reps"]?.toString() ?? "-";
     final rest = exercise["rest_seconds"]?.toString() ?? "-";

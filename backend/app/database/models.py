@@ -186,3 +186,43 @@ class ScheduledWorkout(Base):
     user = relationship("User")
     saved_workout = relationship("SavedWorkout")
     completed_session = relationship("WorkoutSession")
+
+class WorkoutExerciseProgress(Base):
+    __tablename__ = "workout_exercise_progress"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    saved_workout_id = Column(
+        Integer,
+        ForeignKey("saved_workouts.id"),
+        nullable=True,
+    )
+
+    scheduled_workout_id = Column(
+        Integer,
+        ForeignKey("scheduled_workouts.id"),
+        nullable=True,
+    )
+
+    day_number = Column(Integer, nullable=True)
+
+    exercise_index = Column(Integer, nullable=False)
+    exercise_id = Column(Integer, ForeignKey("exercises.id"), nullable=True)
+    exercise_name = Column(String, nullable=False)
+
+    completed = Column(Boolean, default=False)
+    completed_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    user = relationship("User")
+    saved_workout = relationship("SavedWorkout")
+    scheduled_workout = relationship("ScheduledWorkout")
+    exercise = relationship("Exercise")

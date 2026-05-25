@@ -2,6 +2,7 @@ import 'package:afermar3_tf_ipc/IA/ai_generated_workout_view.dart';
 import 'package:afermar3_tf_ipc/IA/saved_workouts_view.dart';
 import 'package:afermar3_tf_ipc/services/scheduled_workout_service.dart';
 import 'package:afermar3_tf_ipc/services/workout_plan_service.dart';
+import 'package:afermar3_tf_ipc/services/workout_progress_service.dart';
 import 'package:afermar3_tf_ipc/services/workout_session_service.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:afermar3_tf_ipc/workout_tracker/active_workout_day_view.dart';
@@ -28,12 +29,27 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
   List<Map<String, dynamic>> upcomingScheduledWorkouts = [];
   bool isLoadingScheduledWorkouts = true;
 
+  Map<int, int> activeDayCompletedExercises = {};
+  bool isLoadingActiveDayProgress = false;
+
   @override
   void initState() {
     super.initState();
     _loadActiveWorkout();
     _loadWorkoutSummary();
     _loadUpcomingScheduledWorkouts();
+  }
+
+  int? _parseInt(dynamic value) {
+    if (value == null) return null;
+
+    if (value is int) return value;
+
+    return int.tryParse(value.toString());
+  }
+
+  int _getDayNumberFromDay(Map<String, dynamic> day, int index) {
+    return _parseInt(day["day_number"]) ?? index + 1;
   }
 
   Future<void> _loadActiveWorkout() async {
@@ -46,14 +62,105 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
         activeWorkout = workout;
         isLoadingActiveWorkout = false;
       });
+
+      await _loadActiveWorkoutDaysProgress(workout: workout);
     } catch (_) {
       if (!mounted) return;
 
       setState(() {
         activeWorkout = null;
+        activeDayCompletedExercises = {};
         isLoadingActiveWorkout = false;
+        isLoadingActiveDayProgress = false;
       });
     }
+  }
+
+  Future<void> _loadActiveWorkoutDaysProgress({
+    Map<String, dynamic>? workout,
+  }) async {
+    final currentWorkout = workout ?? activeWorkout;
+
+    if (currentWorkout == null) {
+      if (!mounted) return;
+
+      setState(() {
+        activeDayCompletedExercises = {};
+        isLoadingActiveDayProgress = false;
+      });
+
+      return;
+    }
+
+    final savedWorkoutId = _parseInt(currentWorkout["id"]);
+    final content = currentWorkout["content"];
+
+    if (savedWorkoutId == null || content is! Map) {
+      if (!mounted) return;
+
+      setState(() {
+        activeDayCompletedExercises = {};
+        isLoadingActiveDayProgress = false;
+      });
+
+      return;
+    }
+
+    final daysRaw = content["days"];
+
+    if (daysRaw is! List || daysRaw.isEmpty) {
+      if (!mounted) return;
+
+      setState(() {
+        activeDayCompletedExercises = {};
+        isLoadingActiveDayProgress = false;
+      });
+
+      return;
+    }
+
+    setState(() {
+      isLoadingActiveDayProgress = true;
+    });
+
+    final progressByDay = <int, int>{};
+
+    for (int i = 0; i < daysRaw.length; i++) {
+      final rawDay = daysRaw[i];
+
+      Map<String, dynamic> day;
+
+      if (rawDay is Map<String, dynamic>) {
+        day = rawDay;
+      } else if (rawDay is Map) {
+        day = Map<String, dynamic>.from(rawDay);
+      } else {
+        continue;
+      }
+
+      final dayNumber = _getDayNumberFromDay(day, i);
+
+      try {
+        final progress = await WorkoutProgressService.getDayProgress(
+          savedWorkoutId: savedWorkoutId,
+          scheduledWorkoutId: null,
+          dayNumber: dayNumber,
+        );
+
+        final completed = _parseInt(progress["total_completed"]) ?? 0;
+
+        progressByDay[dayNumber] = completed;
+      } catch (_) {
+        progressByDay[dayNumber] = 0;
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      activeDayCompletedExercises = progressByDay;
+      isLoadingActiveDayProgress = false;
+    });
   }
 
   Future<void> _loadWorkoutSummary() async {
@@ -178,7 +285,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
       return;
     }
 
-    final result = await Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ActiveWorkoutDayView(
@@ -189,9 +296,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
       ),
     );
 
-    if (result == true) {
-      _refreshWorkoutData();
-    }
+    await _refreshWorkoutData();
   }
 
   List<Map<String, dynamic>> _getActiveWorkoutDays() {
@@ -234,7 +339,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
       return;
     }
 
-    final result = await Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ActiveWorkoutDayView(
@@ -245,9 +350,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
       ),
     );
 
-    if (result == true) {
-      _refreshWorkoutData();
-    }
+    await _refreshWorkoutData();
   }
 
   Future<void> _openManualWorkoutBuilder() async {
@@ -765,10 +868,17 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
             itemCount: activeDays.length,
             itemBuilder: (context, index) {
               final day = activeDays[index];
+              final dayNumber = _getDayNumberFromDay(day, index);
+              final totalExercises = (day["exercises"] as List? ?? []).length;
+              final completedExercises =
+                  activeDayCompletedExercises[dayNumber] ?? 0;
 
               return _ActiveWorkoutDayCard(
                 day: day,
                 index: index,
+                completedExercises: completedExercises,
+                totalExercises: totalExercises,
+                isLoadingProgress: isLoadingActiveDayProgress,
                 onTap: () => _openActiveWorkoutDay(index),
               );
             },
@@ -1132,11 +1242,17 @@ class _UpcomingScheduledWorkoutCard extends StatelessWidget {
 class _ActiveWorkoutDayCard extends StatelessWidget {
   final Map<String, dynamic> day;
   final int index;
+  final int completedExercises;
+  final int totalExercises;
+  final bool isLoadingProgress;
   final VoidCallback onTap;
 
   const _ActiveWorkoutDayCard({
     required this.day,
     required this.index,
+    required this.completedExercises,
+    required this.totalExercises,
+    required this.isLoadingProgress,
     required this.onTap,
   });
 
@@ -1146,8 +1262,14 @@ class _ActiveWorkoutDayCard extends StatelessWidget {
     final dayName = day["name"]?.toString() ?? "Entrenamiento";
     final focus = day["focus"]?.toString() ?? "Rutina activa";
 
-    final exercises = day["exercises"] as List? ?? [];
-    final exercisesText = "${exercises.length} ejercicios";
+    final isCompleted =
+        totalExercises > 0 && completedExercises >= totalExercises && !isLoadingProgress;
+
+    final progressText = isLoadingProgress
+        ? "Cargando progreso..."
+        : totalExercises == 0
+            ? "Sin ejercicios"
+            : "$completedExercises/$totalExercises ejercicios completados";
 
     return InkWell(
       borderRadius: BorderRadius.circular(24),
@@ -1156,10 +1278,11 @@ class _ActiveWorkoutDayCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: TColor.white,
+          color: isCompleted ? Colors.green.withOpacity(0.06) : TColor.white,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: Colors.grey.shade100,
+            color: isCompleted ? Colors.green : Colors.grey.shade100,
+            width: isCompleted ? 1.4 : 1,
           ),
           boxShadow: [
             BoxShadow(
@@ -1176,17 +1299,25 @@ class _ActiveWorkoutDayCard extends StatelessWidget {
               height: 52,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: TColor.primaryColor1.withOpacity(0.10),
+                color: isCompleted
+                    ? Colors.green.withOpacity(0.12)
+                    : TColor.primaryColor1.withOpacity(0.10),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: Text(
-                dayNumber,
-                style: TextStyle(
-                  color: TColor.primaryColor1,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+              child: isCompleted
+                  ? const Icon(
+                      Icons.check_circle_rounded,
+                      color: Colors.green,
+                      size: 28,
+                    )
+                  : Text(
+                      dayNumber,
+                      style: TextStyle(
+                        color: TColor.primaryColor1,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -1216,9 +1347,9 @@ class _ActiveWorkoutDayCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 7),
                   Text(
-                    exercisesText,
+                    progressText,
                     style: TextStyle(
-                      color: TColor.primaryColor1,
+                      color: isCompleted ? Colors.green : TColor.primaryColor1,
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),

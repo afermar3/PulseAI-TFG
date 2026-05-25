@@ -1,4 +1,6 @@
 import 'package:afermar3_tf_ipc/services/scheduled_workout_service.dart';
+import 'package:afermar3_tf_ipc/services/workout_plan_service.dart';
+import 'package:afermar3_tf_ipc/services/workout_progress_service.dart';
 import 'package:afermar3_tf_ipc/widgets/calendar_agenda/lib/calendar_agenda.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:afermar3_tf_ipc/widgets/common.dart';
@@ -32,20 +34,151 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
     _loadScheduledWorkouts();
   }
 
+  int? _parseInt(dynamic value) {
+    if (value == null) return null;
+
+    if (value is int) return value;
+
+    return int.tryParse(value.toString());
+  }
+
+  Map<int, Map<String, dynamic>> _buildSavedWorkoutMap(List<dynamic> workouts) {
+    final map = <int, Map<String, dynamic>>{};
+
+    for (final item in workouts) {
+      if (item is Map<String, dynamic>) {
+        final id = _parseInt(item["id"]);
+        if (id != null) {
+          map[id] = item;
+        }
+      } else if (item is Map) {
+        final workout = Map<String, dynamic>.from(item);
+        final id = _parseInt(workout["id"]);
+        if (id != null) {
+          map[id] = workout;
+        }
+      }
+    }
+
+    return map;
+  }
+
+  int _getTotalExercisesForDay({
+    required Map<int, Map<String, dynamic>> savedWorkoutMap,
+    required int? savedWorkoutId,
+    required int? dayNumber,
+  }) {
+    if (savedWorkoutId == null || dayNumber == null) return 0;
+
+    final savedWorkout = savedWorkoutMap[savedWorkoutId];
+
+    if (savedWorkout == null) return 0;
+
+    final content = savedWorkout["content"];
+
+    if (content is! Map) return 0;
+
+    final days = content["days"];
+
+    if (days is! List) return 0;
+
+    for (int i = 0; i < days.length; i++) {
+      final rawDay = days[i];
+
+      Map<String, dynamic> day;
+
+      if (rawDay is Map<String, dynamic>) {
+        day = rawDay;
+      } else if (rawDay is Map) {
+        day = Map<String, dynamic>.from(rawDay);
+      } else {
+        continue;
+      }
+
+      final currentDayNumber = _parseInt(day["day_number"]) ?? i + 1;
+
+      if (currentDayNumber == dayNumber) {
+        final exercises = day["exercises"];
+
+        if (exercises is List) {
+          return exercises.length;
+        }
+
+        return 0;
+      }
+    }
+
+    return 0;
+  }
+
+  Future<List<Map<String, dynamic>>> _attachProgressToEvents(
+    List<Map<String, dynamic>> events,
+  ) async {
+    final updatedEvents = <Map<String, dynamic>>[];
+
+    for (final event in events) {
+      final updatedEvent = Map<String, dynamic>.from(event);
+
+      final savedWorkoutId = _parseInt(updatedEvent["saved_workout_id"]);
+      final dayNumber = _parseInt(updatedEvent["day_number"]);
+
+      if (savedWorkoutId == null || dayNumber == null) {
+        updatedEvent["completed_exercises"] = 0;
+        updatedEvents.add(updatedEvent);
+        continue;
+      }
+
+      try {
+        final progress = await WorkoutProgressService.getDayProgress(
+          savedWorkoutId: savedWorkoutId,
+          scheduledWorkoutId: null,
+          dayNumber: dayNumber,
+        );
+
+        updatedEvent["completed_exercises"] =
+            _parseInt(progress["total_completed"]) ?? 0;
+      } catch (_) {
+        updatedEvent["completed_exercises"] = 0;
+      }
+
+      updatedEvents.add(updatedEvent);
+    }
+
+    return updatedEvents;
+  }
+
   Future<void> _loadScheduledWorkouts() async {
     try {
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
+
       final result = await ScheduledWorkoutService.getMyScheduledWorkouts();
+
+      List<dynamic> savedWorkouts = [];
+
+      try {
+        savedWorkouts = await WorkoutPlanService.getMyWorkoutPlans();
+      } catch (_) {
+        savedWorkouts = [];
+      }
+
+      final savedWorkoutMap = _buildSavedWorkoutMap(savedWorkouts);
 
       final events = result.map((item) {
         return _mapScheduledWorkoutToEvent(
           Map<String, dynamic>.from(item as Map),
+          savedWorkoutMap: savedWorkoutMap,
         );
       }).toList();
+
+      final eventsWithProgress = await _attachProgressToEvents(events);
 
       if (!mounted) return;
 
       setState(() {
-        eventArr = events;
+        eventArr = eventsWithProgress;
         isLoading = false;
         errorMessage = null;
         _loadEventsForSelectedDay(refresh: false);
@@ -61,8 +194,9 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
   }
 
   Map<String, dynamic> _mapScheduledWorkoutToEvent(
-    Map<String, dynamic> item,
-  ) {
+    Map<String, dynamic> item, {
+    Map<int, Map<String, dynamic>> savedWorkoutMap = const {},
+  }) {
     final rawDate = item["scheduled_date"]?.toString();
 
     DateTime parsedDate;
@@ -75,6 +209,15 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
 
     final durationMinutes = item["duration_minutes"] as int? ?? 45;
     final estimatedKcal = durationMinutes * 6;
+
+    final savedWorkoutId = _parseInt(item["saved_workout_id"]);
+    final dayNumber = _parseInt(item["day_number"]);
+
+    final totalExercises = _getTotalExercisesForDay(
+      savedWorkoutMap: savedWorkoutMap,
+      savedWorkoutId: savedWorkoutId,
+      dayNumber: dayNumber,
+    );
 
     return {
       "id": item["id"],
@@ -89,6 +232,8 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
       "kcal": "$estimatedKcal kcal",
       "start_time": parsedDate,
       "completed": item["completed"] == true,
+      "completed_exercises": 0,
+      "total_exercises": totalExercises,
     };
   }
 
@@ -163,18 +308,15 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
           durationMinutes: durationMinutes,
         );
 
-        final createdEvent = _mapScheduledWorkoutToEvent(created);
-
         if (!mounted) return;
 
-        setState(() {
-          eventArr.add(createdEvent);
-          _loadEventsForSelectedDay(refresh: false);
-        });
+        await _loadScheduledWorkouts();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("${createdEvent["name"]} añadido a la agenda"),
+            content: Text(
+              "${created["workout_title"] ?? "Entrenamiento"} añadido a la agenda",
+            ),
             backgroundColor: TColor.rojo,
             behavior: SnackBarBehavior.floating,
           ),
@@ -204,6 +346,9 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
       );
 
       final updatedEvent = _mapScheduledWorkoutToEvent(updated);
+
+      updatedEvent["completed_exercises"] = event["completed_exercises"] ?? 0;
+      updatedEvent["total_exercises"] = event["total_exercises"] ?? 0;
 
       if (!mounted) return;
 
@@ -549,6 +694,22 @@ class _ScheduleWorkoutCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final completed = event["completed"] as bool? ?? false;
+    final completedExercises =
+        int.tryParse(event["completed_exercises"]?.toString() ?? "") ?? 0;
+    final totalExercises =
+        int.tryParse(event["total_exercises"]?.toString() ?? "") ?? 0;
+
+    final hasProgress = totalExercises > 0;
+    final progressCompleted =
+        hasProgress && completedExercises >= totalExercises;
+
+    final progressText = hasProgress
+        ? "$completedExercises/$totalExercises ejercicios completados"
+        : completedExercises > 0
+            ? "$completedExercises ejercicios completados"
+            : null;
+
+    final isVisuallyCompleted = completed || progressCompleted;
 
     return InkWell(
       borderRadius: BorderRadius.circular(24),
@@ -557,11 +718,13 @@ class _ScheduleWorkoutCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: TColor.white,
+          color: isVisuallyCompleted
+              ? Colors.green.withOpacity(0.04)
+              : TColor.white,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: completed ? Colors.green : Colors.grey.shade100,
-            width: completed ? 1.4 : 1,
+            color: isVisuallyCompleted ? Colors.green : Colors.grey.shade100,
+            width: isVisuallyCompleted ? 1.4 : 1,
           ),
           boxShadow: [
             BoxShadow(
@@ -577,16 +740,16 @@ class _ScheduleWorkoutCard extends StatelessWidget {
               width: 58,
               height: 58,
               decoration: BoxDecoration(
-                color: completed
+                color: isVisuallyCompleted
                     ? Colors.green.withOpacity(0.12)
                     : TColor.primaryColor1.withOpacity(0.10),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Icon(
-                completed
+                isVisuallyCompleted
                     ? Icons.check_circle_rounded
                     : Icons.fitness_center_rounded,
-                color: completed ? Colors.green : TColor.primaryColor1,
+                color: isVisuallyCompleted ? Colors.green : TColor.primaryColor1,
                 size: 30,
               ),
             ),
@@ -612,6 +775,19 @@ class _ScheduleWorkoutCard extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
+                  if (progressText != null) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      progressText,
+                      style: TextStyle(
+                        color: progressCompleted
+                            ? Colors.green
+                            : TColor.primaryColor1,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -689,6 +865,17 @@ class _WorkoutEventBottomSheet extends StatelessWidget {
     final startTime = event["start_time"] as DateTime;
     final completed = event["completed"] as bool? ?? false;
 
+    final completedExercises =
+        int.tryParse(event["completed_exercises"]?.toString() ?? "") ?? 0;
+    final totalExercises =
+        int.tryParse(event["total_exercises"]?.toString() ?? "") ?? 0;
+
+    final progressText = totalExercises > 0
+        ? "$completedExercises/$totalExercises ejercicios completados"
+        : completedExercises > 0
+            ? "$completedExercises ejercicios completados"
+            : "Sin progreso registrado";
+
     return Container(
       padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
       decoration: BoxDecoration(
@@ -751,6 +938,15 @@ class _WorkoutEventBottomSheet extends StatelessWidget {
                           color: TColor.gray,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        progressText,
+                        style: TextStyle(
+                          color: TColor.primaryColor1,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ],
