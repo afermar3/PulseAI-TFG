@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -12,6 +12,7 @@ from app.database.models import (
     WorkoutSession,
 )
 from app.schemas.scheduled_workout_schema import (
+    ScheduledWorkoutComplete,
     ScheduledWorkoutCreate,
     ScheduledWorkoutResponse,
 )
@@ -98,9 +99,13 @@ def get_my_scheduled_workouts(
     ]
 
 
-@router.patch("/{scheduled_workout_id}/complete", response_model=ScheduledWorkoutResponse)
+@router.patch(
+    "/{scheduled_workout_id}/complete",
+    response_model=ScheduledWorkoutResponse,
+)
 def complete_scheduled_workout(
     scheduled_workout_id: int,
+    data: Optional[ScheduledWorkoutComplete] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -119,8 +124,23 @@ def complete_scheduled_workout(
             detail="Entrenamiento programado no encontrado",
         )
 
+    # Evita duplicados: si ya está completado, no crea otra sesión.
     if scheduled_workout.completed:
         return _scheduled_workout_to_response(scheduled_workout)
+
+    total_exercises = 0
+    completed_exercises = 0
+    duration_minutes = scheduled_workout.duration_minutes
+
+    if data is not None:
+        if data.total_exercises is not None:
+            total_exercises = data.total_exercises
+
+        if data.completed_exercises is not None:
+            completed_exercises = data.completed_exercises
+
+        if data.duration_minutes is not None:
+            duration_minutes = data.duration_minutes
 
     session = WorkoutSession(
         user_id=current_user.id,
@@ -128,9 +148,9 @@ def complete_scheduled_workout(
         workout_title=scheduled_workout.workout_title,
         day_number=scheduled_workout.day_number,
         day_name=scheduled_workout.day_name,
-        total_exercises=0,
-        completed_exercises=0,
-        duration_minutes=scheduled_workout.duration_minutes,
+        total_exercises=total_exercises,
+        completed_exercises=completed_exercises,
+        duration_minutes=duration_minutes,
     )
 
     db.add(session)

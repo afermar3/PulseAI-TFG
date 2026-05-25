@@ -12,7 +12,12 @@ class ScheduledWorkoutCreate(BaseModel):
     day_name: Optional[str] = None
 
     scheduled_date: datetime
+    duration_minutes: Optional[int] = None
 
+
+class ScheduledWorkoutComplete(BaseModel):
+    total_exercises: Optional[int] = None
+    completed_exercises: Optional[int] = None
     duration_minutes: Optional[int] = None
 
 
@@ -28,8 +33,7 @@ class ScheduledWorkoutResponse(BaseModel):
     day_name: Optional[str] = None
 
     scheduled_date: datetime
-
     duration_minutes: Optional[int] = None
-    completed: bool
 
+    completed: bool
     created_at: datetime

@@ -15,6 +15,10 @@ class WorkoutSessionCreate(BaseModel):
     completed_exercises: int
     duration_minutes: Optional[int] = None
 
+    # Por defecto NO permitimos duplicados.
+    # Solo se usará cuando el usuario pulse explícitamente "Volver a hacer".
+    allow_duplicate: bool = False
+
 
 class WorkoutSessionResponse(BaseModel):
     id: int
@@ -30,3 +34,8 @@ class WorkoutSessionResponse(BaseModel):
     duration_minutes: Optional[int] = None
 
     completed_at: datetime
+
+
+class WorkoutSessionTodayStatusResponse(BaseModel):
+    already_completed_today: bool
+    session: Optional[WorkoutSessionResponse] = None

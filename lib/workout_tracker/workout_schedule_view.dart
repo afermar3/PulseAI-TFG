@@ -6,6 +6,7 @@ import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:afermar3_tf_ipc/widgets/common.dart';
 import 'package:flutter/material.dart';
 
+import 'active_workout_day_view.dart';
 import 'add_schedule_view.dart';
 
 class WorkoutScheduleView extends StatefulWidget {
@@ -234,6 +235,7 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
       "completed": item["completed"] == true,
       "completed_exercises": 0,
       "total_exercises": totalExercises,
+      "workout_content": savedWorkoutMap[savedWorkoutId]?["content"],
     };
   }
 
@@ -337,18 +339,112 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
     }
   }
 
+  Future<int> _markAllExercisesAsCompletedFromEvent(
+    Map<String, dynamic> event,
+  ) async {
+    final rawContent = event["workout_content"];
+
+    if (rawContent is! Map) {
+      return 0;
+    }
+
+    final content = Map<String, dynamic>.from(rawContent);
+    final savedWorkoutId = _parseInt(event["saved_workout_id"]);
+    final dayNumber = _parseInt(event["day_number"]);
+
+    if (savedWorkoutId == null || dayNumber == null) {
+      return 0;
+    }
+
+    final days = content["days"];
+
+    if (days is! List) {
+      return 0;
+    }
+
+    List<dynamic> exercises = [];
+
+    for (int i = 0; i < days.length; i++) {
+      final rawDay = days[i];
+
+      if (rawDay is! Map) continue;
+
+      final day = Map<String, dynamic>.from(rawDay);
+      final currentDayNumber = _parseInt(day["day_number"]) ?? i + 1;
+
+      if (currentDayNumber == dayNumber) {
+        final rawExercises = day["exercises"];
+
+        if (rawExercises is List) {
+          exercises = rawExercises;
+        }
+
+        break;
+      }
+    }
+
+    if (exercises.isEmpty) {
+      return 0;
+    }
+
+    for (int i = 0; i < exercises.length; i++) {
+      final rawExercise = exercises[i];
+
+      if (rawExercise is! Map) continue;
+
+      final exercise = Map<String, dynamic>.from(rawExercise);
+
+      final exerciseName = exercise["exercise_name"]?.toString() ??
+          exercise["name"]?.toString() ??
+          "Ejercicio";
+
+      await WorkoutProgressService.toggleExerciseProgress(
+        savedWorkoutId: savedWorkoutId,
+        scheduledWorkoutId: null,
+        dayNumber: dayNumber,
+        exerciseIndex: i,
+        exerciseId: _parseInt(exercise["exercise_id"]),
+        exerciseName: exerciseName,
+        completed: true,
+      );
+    }
+
+    return exercises.length;
+  }
+
   Future<void> _markWorkoutDone(Map<String, dynamic> event) async {
     Navigator.pop(context);
 
     try {
+      final totalExercisesFromEvent = _parseInt(event["total_exercises"]) ?? 0;
+      final completedFromProgress =
+          _parseInt(event["completed_exercises"]) ?? 0;
+      final durationMinutes = _parseInt(event["duration_minutes"]) ?? 45;
+
+      int totalExercises = totalExercisesFromEvent;
+      int completedExercises = completedFromProgress;
+
+      final markedExercises = await _markAllExercisesAsCompletedFromEvent(event);
+
+      if (markedExercises > 0) {
+        totalExercises = markedExercises;
+        completedExercises = markedExercises;
+      } else if (totalExercises > 0) {
+        completedExercises = totalExercises;
+      }
+
       final updated = await ScheduledWorkoutService.completeScheduledWorkout(
         event["id"] as int,
+        totalExercises: totalExercises,
+        completedExercises: completedExercises,
+        durationMinutes: durationMinutes,
       );
 
       final updatedEvent = _mapScheduledWorkoutToEvent(updated);
 
-      updatedEvent["completed_exercises"] = event["completed_exercises"] ?? 0;
-      updatedEvent["total_exercises"] = event["total_exercises"] ?? 0;
+      updatedEvent["completed_exercises"] = completedExercises;
+      updatedEvent["total_exercises"] = totalExercises;
+      updatedEvent["workout_content"] = event["workout_content"];
 
       if (!mounted) return;
 
@@ -363,6 +459,8 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
 
         _loadEventsForSelectedDay(refresh: false);
       });
+
+      await _loadScheduledWorkouts();
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -383,6 +481,62 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+    }
+  }
+
+  Future<void> _startScheduledWorkout(Map<String, dynamic> event) async {
+    Navigator.pop(context);
+
+    final rawContent = event["workout_content"];
+
+    if (rawContent is! Map) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("No se ha podido abrir la rutina programada"),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final content = Map<String, dynamic>.from(rawContent);
+
+    final dayNumber = _parseInt(event["day_number"]);
+    final days = content["days"];
+
+    int dayIndex = 0;
+
+    if (dayNumber != null && days is List) {
+      for (int i = 0; i < days.length; i++) {
+        final rawDay = days[i];
+
+        if (rawDay is Map) {
+          final day = Map<String, dynamic>.from(rawDay);
+          final currentDayNumber = _parseInt(day["day_number"]) ?? i + 1;
+
+          if (currentDayNumber == dayNumber) {
+            dayIndex = i;
+            break;
+          }
+        }
+      }
+    }
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ActiveWorkoutDayView(
+          workout: content,
+          savedWorkoutId: _parseInt(event["saved_workout_id"]),
+          scheduledWorkoutId: _parseInt(event["id"]),
+          dayIndex: dayIndex,
+        ),
+      ),
+    );
+
+    if (result == true && mounted) {
+      await _loadScheduledWorkouts();
     }
   }
 
@@ -431,6 +585,9 @@ class _WorkoutScheduleViewState extends State<WorkoutScheduleView> {
       builder: (context) {
         return _WorkoutEventBottomSheet(
           event: event,
+          onStartWorkout: () {
+            _startScheduledWorkout(event);
+          },
           onMarkDone: () {
             _markWorkoutDone(event);
           },
@@ -700,8 +857,7 @@ class _ScheduleWorkoutCard extends StatelessWidget {
         int.tryParse(event["total_exercises"]?.toString() ?? "") ?? 0;
 
     final hasProgress = totalExercises > 0;
-    final progressCompleted =
-        hasProgress && completedExercises >= totalExercises;
+    final progressCompleted = hasProgress && completedExercises >= totalExercises;
 
     final progressText = hasProgress
         ? "$completedExercises/$totalExercises ejercicios completados"
@@ -845,11 +1001,13 @@ class _ScheduleWorkoutCard extends StatelessWidget {
 
 class _WorkoutEventBottomSheet extends StatelessWidget {
   final Map<String, dynamic> event;
+  final VoidCallback onStartWorkout;
   final VoidCallback onMarkDone;
   final VoidCallback onDelete;
 
   const _WorkoutEventBottomSheet({
     required this.event,
+    required this.onStartWorkout,
     required this.onMarkDone,
     required this.onDelete,
   });
@@ -995,8 +1153,12 @@ class _WorkoutEventBottomSheet extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               height: 54,
-              child: ElevatedButton(
-                onPressed: completed ? null : onMarkDone,
+              child: ElevatedButton.icon(
+                onPressed: completed ? null : onStartWorkout,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: Text(
+                  completed ? "Entrenamiento completado" : "Realizar entrenamiento",
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: TColor.primaryColor1,
                   disabledBackgroundColor: Colors.green.withOpacity(0.18),
@@ -1007,10 +1169,27 @@ class _WorkoutEventBottomSheet extends StatelessWidget {
                     borderRadius: BorderRadius.circular(18),
                   ),
                 ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: OutlinedButton(
+                onPressed: completed ? null : onMarkDone,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: TColor.primaryColor1,
+                  disabledForegroundColor: Colors.green,
+                  side: BorderSide(
+                    color: completed ? Colors.green : TColor.primaryColor1,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
                 child: Text(
-                  completed ? "Entrenamiento completado" : "Marcar como hecho",
+                  completed ? "Ya marcado como hecho" : "Marcar como hecho",
                   style: const TextStyle(
-                    fontSize: 15,
                     fontWeight: FontWeight.w800,
                   ),
                 ),

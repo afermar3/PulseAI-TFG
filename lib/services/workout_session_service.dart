@@ -14,6 +14,7 @@ class WorkoutSessionService {
     required int totalExercises,
     required int completedExercises,
     required int? durationMinutes,
+    bool allowDuplicate = false,
   }) async {
     final token = await TokenStorage.getToken();
 
@@ -37,6 +38,7 @@ class WorkoutSessionService {
         "total_exercises": totalExercises,
         "completed_exercises": completedExercises,
         "duration_minutes": durationMinutes,
+        "allow_duplicate": allowDuplicate,
       }),
     );
 
@@ -47,6 +49,46 @@ class WorkoutSessionService {
     }
 
     throw Exception(data["detail"] ?? "No se ha podido guardar la sesión");
+  }
+
+  static Future<Map<String, dynamic>> getTodaySessionStatus({
+    required int? savedWorkoutId,
+    required int? dayNumber,
+  }) async {
+    final token = await TokenStorage.getToken();
+
+    if (token == null) {
+      throw Exception("No hay sesión iniciada");
+    }
+
+    final queryParams = <String, String>{};
+
+    if (savedWorkoutId != null) {
+      queryParams["saved_workout_id"] = savedWorkoutId.toString();
+    }
+
+    if (dayNumber != null) {
+      queryParams["day_number"] = dayNumber.toString();
+    }
+
+    final url = Uri.parse(
+      "${ApiClient.baseUrl}/workout-sessions/today-status",
+    ).replace(queryParameters: queryParams);
+
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data as Map<String, dynamic>;
+    }
+
+    throw Exception(data["detail"] ?? "No se ha podido comprobar la sesión");
   }
 
   static Future<List<dynamic>> getMyWorkoutSessions() async {
@@ -75,27 +117,27 @@ class WorkoutSessionService {
   }
 
   static Future<Map<String, dynamic>> getWorkoutSummary() async {
-  final token = await TokenStorage.getToken();
+    final token = await TokenStorage.getToken();
 
-  if (token == null) {
-    throw Exception("No hay sesión iniciada");
+    if (token == null) {
+      throw Exception("No hay sesión iniciada");
+    }
+
+    final url = Uri.parse("${ApiClient.baseUrl}/workout-sessions/summary");
+
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data as Map<String, dynamic>;
+    }
+
+    throw Exception(data["detail"] ?? "No se ha podido cargar el resumen");
   }
-
-  final url = Uri.parse("${ApiClient.baseUrl}/workout-sessions/summary");
-
-  final response = await http.get(
-    url,
-    headers: {
-      "Authorization": "Bearer $token",
-    },
-  );
-
-  final data = jsonDecode(response.body);
-
-  if (response.statusCode == 200) {
-    return data as Map<String, dynamic>;
-  }
-
-  throw Exception(data["detail"] ?? "No se ha podido cargar el resumen");
-}
 }

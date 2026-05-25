@@ -1,4 +1,5 @@
 import 'package:afermar3_tf_ipc/common_widget/round_button.dart';
+import 'package:afermar3_tf_ipc/services/scheduled_workout_service.dart';
 import 'package:afermar3_tf_ipc/services/workout_progress_service.dart';
 import 'package:afermar3_tf_ipc/services/workout_session_service.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
@@ -8,12 +9,14 @@ import 'package:flutter/material.dart';
 class ActiveWorkoutDayView extends StatefulWidget {
   final Map<String, dynamic> workout;
   final int? savedWorkoutId;
+  final int? scheduledWorkoutId;
   final int dayIndex;
 
   const ActiveWorkoutDayView({
     super.key,
     required this.workout,
     this.savedWorkoutId,
+    this.scheduledWorkoutId,
     this.dayIndex = 0,
   });
 
@@ -27,10 +30,25 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
   bool isSavingSession = false;
   bool isLoadingProgress = true;
 
+  bool alreadyCompletedToday = false;
+  bool isCheckingTodaySession = true;
+
+  // Cuando el usuario quiere repetir el entrenamiento,
+  // no modificamos el progreso guardado anterior.
+  // Solo usamos checks locales hasta finalizar la nueva sesión.
+  bool isRepeatMode = false;
+
   @override
   void initState() {
     super.initState();
-    _loadExerciseProgress();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    await Future.wait([
+      _loadExerciseProgress(),
+      _checkTodaySessionStatus(),
+    ]);
   }
 
   Map<String, dynamic>? get currentDay {
@@ -110,6 +128,65 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
         "Ejercicio";
   }
 
+  Future<void> _checkTodaySessionStatus() async {
+    try {
+      final status = await WorkoutSessionService.getTodaySessionStatus(
+        savedWorkoutId: widget.savedWorkoutId,
+        dayNumber: currentDayNumber,
+      );
+
+      final completedToday = status["already_completed_today"] == true;
+
+      if (!mounted) return;
+
+      setState(() {
+        alreadyCompletedToday = completedToday;
+        isCheckingTodaySession = false;
+      });
+
+      if (completedToday && !isRepeatMode) {
+        await _ensureAllExercisesCompletedAfterFinish();
+      }
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        alreadyCompletedToday = false;
+        isCheckingTodaySession = false;
+      });
+    }
+  }
+
+  Future<void> _ensureAllExercisesCompletedAfterFinish() async {
+    if (totalExercises == 0) return;
+
+    final indexes = <int>{};
+
+    for (int i = 0; i < exercises.length; i++) {
+      final exercise = exercises[i];
+
+      indexes.add(i);
+
+      await WorkoutProgressService.toggleExerciseProgress(
+        savedWorkoutId: widget.savedWorkoutId,
+        scheduledWorkoutId: null,
+        dayNumber: currentDayNumber,
+        exerciseIndex: i,
+        exerciseId: _parseExerciseId(exercise["exercise_id"]),
+        exerciseName: _getExerciseName(exercise),
+        completed: true,
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      completedExercises
+        ..clear()
+        ..addAll(indexes);
+    });
+  }
+
   Future<void> _loadExerciseProgress() async {
     try {
       final progress = await WorkoutProgressService.getDayProgress(
@@ -160,6 +237,19 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
   }
 
   Future<void> _toggleExercise(int index) async {
+    if (alreadyCompletedToday && !isRepeatMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            "Este entrenamiento ya está finalizado. Pulsa 'Volver a hacer entrenamiento' para repetirlo.",
+          ),
+          backgroundColor: TColor.rojo,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     if (index < 0 || index >= exercises.length) return;
 
     final exercise = exercises[index];
@@ -174,6 +264,10 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
         completedExercises.remove(index);
       }
     });
+
+    // En modo repetición NO tocamos el progreso persistido.
+    // El entrenamiento anterior debe seguir constando como completado.
+    if (isRepeatMode) return;
 
     try {
       await WorkoutProgressService.toggleExerciseProgress(
@@ -245,7 +339,9 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
     );
   }
 
-  Future<void> _finishWorkout() async {
+  Future<void> _finishWorkout({
+    bool allowDuplicate = false,
+  }) async {
     if (totalExercises == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -289,21 +385,44 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
     });
 
     try {
-      await WorkoutSessionService.createWorkoutSession(
-        savedWorkoutId: widget.savedWorkoutId,
-        workoutTitle: workoutTitle,
-        dayNumber: dayNumber,
-        dayName: dayName,
-        totalExercises: totalExercises,
-        completedExercises: completedCount,
-        durationMinutes: 45,
-      );
+      if (widget.scheduledWorkoutId != null && !allowDuplicate) {
+        await ScheduledWorkoutService.completeScheduledWorkout(
+          widget.scheduledWorkoutId!,
+          totalExercises: totalExercises,
+          completedExercises: completedCount,
+          durationMinutes: 45,
+        );
+      } else {
+        await WorkoutSessionService.createWorkoutSession(
+          savedWorkoutId: widget.savedWorkoutId,
+          workoutTitle: workoutTitle,
+          dayNumber: dayNumber,
+          dayName: dayName,
+          totalExercises: totalExercises,
+          completedExercises: completedCount,
+          durationMinutes: 45,
+          allowDuplicate: allowDuplicate,
+        );
+      }
+
+      if (!mounted) return;
+
+      if (!allowDuplicate) {
+        setState(() {
+          alreadyCompletedToday = true;
+          isRepeatMode = false;
+        });
+
+        await _ensureAllExercisesCompletedAfterFinish();
+      }
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text("Entrenamiento guardado correctamente"),
+          content: allowDuplicate
+              ? const Text("Entrenamiento repetido guardado correctamente")
+              : const Text("Entrenamiento guardado correctamente"),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
         ),
@@ -329,6 +448,92 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
         });
       }
     }
+  }
+
+  Future<void> _confirmRepeatWorkout() async {
+    final repeat = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Volver a hacer entrenamiento"),
+          content: const Text(
+            "Se reiniciarán los checks en esta pantalla para que puedas repetir el entrenamiento. Solo se sumará una nueva sesión cuando vuelvas a completar todos los ejercicios y finalices.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("Cancelar"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(
+                "Empezar",
+                style: TextStyle(
+                  color: TColor.primaryColor1,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (repeat == true) {
+      setState(() {
+        isRepeatMode = true;
+        completedExercises.clear();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            "Modo repetición activado. Vuelve a completar los ejercicios.",
+          ),
+          backgroundColor: TColor.primaryColor1,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  String _getBottomButtonTitle() {
+    if (isSavingSession) return "Guardando...";
+    if (isCheckingTodaySession) return "Comprobando...";
+
+    if (isRepeatMode) {
+      if (completedCount == totalExercises && totalExercises > 0) {
+        return "Finalizar repetición";
+      }
+
+      return "Completar repetición";
+    }
+
+    if (alreadyCompletedToday) {
+      return "Volver a hacer entrenamiento";
+    }
+
+    if (completedCount == totalExercises && totalExercises > 0) {
+      return "Finalizar entrenamiento";
+    }
+
+    return "Completar ejercicios";
+  }
+
+  VoidCallback _getBottomButtonAction() {
+    if (isSavingSession || isCheckingTodaySession) {
+      return () {};
+    }
+
+    if (isRepeatMode) {
+      return () => _finishWorkout(allowDuplicate: true);
+    }
+
+    if (alreadyCompletedToday) {
+      return _confirmRepeatWorkout;
+    }
+
+    return () => _finishWorkout();
   }
 
   @override
@@ -551,12 +756,8 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
             child: SafeArea(
               top: false,
               child: RoundButton(
-                title: isSavingSession
-                    ? "Guardando..."
-                    : completedCount == totalExercises && totalExercises > 0
-                        ? "Finalizar entrenamiento"
-                        : "Completar ejercicios",
-                onPressed: isSavingSession ? () {} : _finishWorkout,
+                title: _getBottomButtonTitle(),
+                onPressed: _getBottomButtonAction(),
               ),
             ),
           ),
@@ -640,12 +841,24 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
           completed: completed,
           onToggle: () => _toggleExercise(index),
           onTap: () => _openExerciseDetail(exercise),
+          locked: alreadyCompletedToday && !isRepeatMode,
         );
       },
     );
   }
 
   Widget _buildProgressCard() {
+    String helperText = "Marca cada ejercicio cuando lo termines.";
+    Color helperColor = TColor.gray;
+
+    if (isRepeatMode) {
+      helperText = "Modo repetición activo. Vuelve a completar los ejercicios.";
+      helperColor = TColor.primaryColor1;
+    } else if (alreadyCompletedToday) {
+      helperText = "Ya has finalizado este entrenamiento hoy.";
+      helperColor = Colors.green;
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -698,9 +911,9 @@ class _ActiveWorkoutDayViewState extends State<ActiveWorkoutDayView> {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  "Marca cada ejercicio cuando lo termines.",
+                  helperText,
                   style: TextStyle(
-                    color: TColor.gray,
+                    color: helperColor,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -851,6 +1064,7 @@ class _ActiveExerciseCard extends StatelessWidget {
   final Map<String, dynamic> exercise;
   final int index;
   final bool completed;
+  final bool locked;
   final VoidCallback onToggle;
   final VoidCallback onTap;
 
@@ -858,6 +1072,7 @@ class _ActiveExerciseCard extends StatelessWidget {
     required this.exercise,
     required this.index,
     required this.completed,
+    required this.locked,
     required this.onToggle,
     required this.onTap,
   });
@@ -894,7 +1109,7 @@ class _ActiveExerciseCard extends StatelessWidget {
         children: [
           InkWell(
             borderRadius: BorderRadius.circular(18),
-            onTap: onToggle,
+            onTap: locked ? null : onToggle,
             child: Container(
               width: 48,
               height: 48,
@@ -963,9 +1178,9 @@ class _ActiveExerciseCard extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Icon(
-            Icons.arrow_forward_ios_rounded,
-            color: TColor.gray,
-            size: 15,
+            locked ? Icons.lock_rounded : Icons.arrow_forward_ios_rounded,
+            color: locked ? Colors.green : TColor.gray,
+            size: locked ? 18 : 15,
           ),
         ],
       ),

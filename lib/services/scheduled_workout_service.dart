@@ -44,7 +44,9 @@ class ScheduledWorkoutService {
       return data as Map<String, dynamic>;
     }
 
-    throw Exception(data["detail"] ?? "No se ha podido programar el entrenamiento");
+    throw Exception(
+      data["detail"] ?? "No se ha podido programar el entrenamiento",
+    );
   }
 
   static Future<List<dynamic>> getMyScheduledWorkouts() async {
@@ -69,10 +71,17 @@ class ScheduledWorkoutService {
       return data as List<dynamic>;
     }
 
-    throw Exception(data["detail"] ?? "No se han podido cargar los entrenamientos programados");
+    throw Exception(
+      data["detail"] ?? "No se han podido cargar los entrenamientos programados",
+    );
   }
 
-  static Future<Map<String, dynamic>> completeScheduledWorkout(int scheduledWorkoutId) async {
+  static Future<Map<String, dynamic>> completeScheduledWorkout(
+    int scheduledWorkoutId, {
+    int? totalExercises,
+    int? completedExercises,
+    int? durationMinutes,
+  }) async {
     final token = await TokenStorage.getToken();
 
     if (token == null) {
@@ -86,8 +95,14 @@ class ScheduledWorkoutService {
     final response = await http.patch(
       url,
       headers: {
+        "Content-Type": "application/json",
         "Authorization": "Bearer $token",
       },
+      body: jsonEncode({
+        "total_exercises": totalExercises,
+        "completed_exercises": completedExercises,
+        "duration_minutes": durationMinutes,
+      }),
     );
 
     final data = jsonDecode(response.body);
@@ -96,7 +111,9 @@ class ScheduledWorkoutService {
       return data as Map<String, dynamic>;
     }
 
-    throw Exception(data["detail"] ?? "No se ha podido completar el entrenamiento");
+    throw Exception(
+      data["detail"] ?? "No se ha podido completar el entrenamiento",
+    );
   }
 
   static Future<void> deleteScheduledWorkout(int scheduledWorkoutId) async {
@@ -123,6 +140,8 @@ class ScheduledWorkoutService {
 
     final data = jsonDecode(response.body);
 
-    throw Exception(data["detail"] ?? "No se ha podido eliminar el entrenamiento programado");
+    throw Exception(
+      data["detail"] ?? "No se ha podido eliminar el entrenamiento programado",
+    );
   }
 }
