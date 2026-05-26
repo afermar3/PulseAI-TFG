@@ -178,39 +178,84 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
     selectedDayIndex = 0;
   }
 
-  void _resizeDays(int newValue) {
-    if (newValue == daysPerWeek) return;
+Future<void> _resizeDays(int newValue) async {
+  if (newValue == daysPerWeek) return;
 
-    final updatedDays = <Map<String, dynamic>>[];
+  if (newValue < daysPerWeek) {
+    final removedDays = days.skip(newValue).toList();
 
-    for (int i = 0; i < newValue; i++) {
-      if (i < days.length) {
-        final current = Map<String, dynamic>.from(days[i]);
-        current["day_number"] = i + 1;
-        updatedDays.add(current);
-      } else {
-        updatedDays.add({
-          "day_number": i + 1,
-          "name": "Día ${i + 1}",
-          "focus": "Entrenamiento personalizado",
-          "exercises": <Map<String, dynamic>>[],
-        });
-      }
+    final removedExercisesCount = removedDays.fold<int>(0, (sum, day) {
+      final dayExercises = day["exercises"] as List? ?? [];
+      return sum + dayExercises.length;
+    });
+
+    if (removedExercisesCount > 0) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text("Reducir días"),
+            content: Text(
+              "Vas a eliminar ${daysPerWeek - newValue} día(s) de la rutina. "
+              "Esos días contienen $removedExercisesCount ejercicio(s). "
+              "Si continúas, se perderán de esta rutina.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text("Cancelar"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(
+                  "Eliminar días",
+                  style: TextStyle(
+                    color: TColor.rojo,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirm != true) return;
+    }
+  }
+
+  final updatedDays = <Map<String, dynamic>>[];
+
+  for (int i = 0; i < newValue; i++) {
+    if (i < days.length) {
+      final current = Map<String, dynamic>.from(days[i]);
+      current["day_number"] = i + 1;
+      updatedDays.add(current);
+    } else {
+      updatedDays.add({
+        "day_number": i + 1,
+        "name": "Día ${i + 1}",
+        "focus": "Entrenamiento personalizado",
+        "exercises": <Map<String, dynamic>>[],
+      });
+    }
+  }
+
+  if (!mounted) return;
+
+  setState(() {
+    daysPerWeek = newValue;
+    days = updatedDays;
+
+    if (selectedDayIndex >= days.length) {
+      selectedDayIndex = days.length - 1;
     }
 
-    setState(() {
-      daysPerWeek = newValue;
-      days = updatedDays;
-
-      if (selectedDayIndex >= days.length) {
-        selectedDayIndex = days.length - 1;
-      }
-
-      if (selectedDayIndex < 0) {
-        selectedDayIndex = 0;
-      }
-    });
-  }
+    if (selectedDayIndex < 0) {
+      selectedDayIndex = 0;
+    }
+  });
+}
 
   Future<void> _loadExercises() async {
     try {
@@ -272,6 +317,28 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
       list.removeAt(index);
     });
   }
+
+  void _moveExerciseUp(int index) {
+  if (index <= 0) return;
+
+  setState(() {
+    final list = currentDay["exercises"] as List;
+
+    final exercise = list.removeAt(index);
+    list.insert(index - 1, exercise);
+  });
+}
+
+void _moveExerciseDown(int index) {
+  final list = currentDay["exercises"] as List;
+
+  if (index < 0 || index >= list.length - 1) return;
+
+  setState(() {
+    final exercise = list.removeAt(index);
+    list.insert(index + 1, exercise);
+  });
+}
 
   void _showSimplePicker({
     required String title,
@@ -1053,18 +1120,26 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
                                 itemBuilder: (context, index) {
                                   final exercise = currentExercises[index];
 
-                                  return _ManualExerciseCard(
-                                    exercise: exercise,
-                                    onEdit: () {
-                                      _showConfigureExerciseSheet(
-                                        exercise,
-                                        editIndex: index,
-                                      );
-                                    },
-                                    onDelete: () {
-                                      _removeExerciseFromCurrentDay(index);
-                                    },
-                                  );
+                                    return _ManualExerciseCard(
+                                      exercise: exercise,
+                                      canMoveUp: index > 0,
+                                      canMoveDown: index < currentExercises.length - 1,
+                                      onMoveUp: () {
+                                        _moveExerciseUp(index);
+                                      },
+                                      onMoveDown: () {
+                                        _moveExerciseDown(index);
+                                      },
+                                      onEdit: () {
+                                        _showConfigureExerciseSheet(
+                                          exercise,
+                                          editIndex: index,
+                                        );
+                                      },
+                                      onDelete: () {
+                                        _removeExerciseFromCurrentDay(index);
+                                      },
+                                    );
                                 },
                               ),
                           ],
@@ -1464,11 +1539,21 @@ class _ExercisePickerCard extends StatelessWidget {
 
 class _ManualExerciseCard extends StatelessWidget {
   final Map<String, dynamic> exercise;
+
+  final bool canMoveUp;
+  final bool canMoveDown;
+
+  final VoidCallback onMoveUp;
+  final VoidCallback onMoveDown;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _ManualExerciseCard({
     required this.exercise,
+    required this.canMoveUp,
+    required this.canMoveDown,
+    required this.onMoveUp,
+    required this.onMoveDown,
     required this.onEdit,
     required this.onDelete,
   });
@@ -1500,6 +1585,22 @@ class _ManualExerciseCard extends StatelessWidget {
       ),
       child: Row(
         children: [
+          Column(
+            children: [
+              _OrderButton(
+                icon: Icons.keyboard_arrow_up_rounded,
+                enabled: canMoveUp,
+                onTap: onMoveUp,
+              ),
+              const SizedBox(height: 4),
+              _OrderButton(
+                icon: Icons.keyboard_arrow_down_rounded,
+                enabled: canMoveDown,
+                onTap: onMoveDown,
+              ),
+            ],
+          ),
+          const SizedBox(width: 10),
           Container(
             width: 46,
             height: 46,
@@ -1575,6 +1676,42 @@ class _ManualExerciseCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+
+class _OrderButton extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _OrderButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: enabled
+              ? TColor.primaryColor1.withOpacity(0.10)
+              : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          size: 22,
+          color: enabled ? TColor.primaryColor1 : Colors.grey.shade400,
+        ),
       ),
     );
   }
