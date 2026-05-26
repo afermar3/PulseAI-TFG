@@ -9,6 +9,8 @@ import 'package:afermar3_tf_ipc/workout_tracker/active_workout_day_view.dart';
 import 'package:afermar3_tf_ipc/workout_tracker/exercise_library_view.dart';
 import 'package:afermar3_tf_ipc/workout_tracker/manual_workout_builder_view.dart';
 import 'package:afermar3_tf_ipc/workout_tracker/workout_schedule_view.dart';
+import 'package:afermar3_tf_ipc/workout_tracker/workout_history_view.dart';
+import 'package:afermar3_tf_ipc/workout_tracker/workout_stats_view.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
@@ -26,6 +28,9 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
   Map<String, dynamic>? workoutSummary;
   bool isLoadingSummary = true;
 
+  Map<String, dynamic>? workoutStreak;
+  bool isLoadingStreak = true;
+
   List<Map<String, dynamic>> upcomingScheduledWorkouts = [];
   bool isLoadingScheduledWorkouts = true;
 
@@ -37,6 +42,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
     super.initState();
     _loadActiveWorkout();
     _loadWorkoutSummary();
+    _loadWorkoutStreak();
     _loadUpcomingScheduledWorkouts();
   }
 
@@ -163,30 +169,61 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
     });
   }
 
-  Future<void> _loadWorkoutSummary() async {
-    try {
-      final summary = await WorkoutSessionService.getWorkoutSummary();
+Future<void> _loadWorkoutSummary() async {
+  try {
+    final summary = await WorkoutSessionService.getWeeklyWorkoutSummary();
 
-      if (!mounted) return;
+    if (!mounted) return;
 
-      setState(() {
-        workoutSummary = summary;
-        isLoadingSummary = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
+    setState(() {
+      workoutSummary = summary;
+      isLoadingSummary = false;
+    });
+  } catch (_) {
+    if (!mounted) return;
 
-      setState(() {
-        workoutSummary = {
-          "total_sessions": 0,
-          "total_minutes": 0,
-          "estimated_kcal": 0,
-          "total_completed_exercises": 0,
-        };
-        isLoadingSummary = false;
-      });
-    }
+    setState(() {
+      workoutSummary = {
+        "week_start": null,
+        "week_end": null,
+        "total_sessions": 0,
+        "total_minutes": 0,
+        "estimated_kcal": 0,
+        "total_completed_exercises": 0,
+        "daily_summary": [],
+      };
+      isLoadingSummary = false;
+    });
   }
+}
+
+
+Future<void> _loadWorkoutStreak() async {
+  try {
+    final streak = await WorkoutSessionService.getWorkoutStreak();
+
+    if (!mounted) return;
+
+    setState(() {
+      workoutStreak = streak;
+      isLoadingStreak = false;
+    });
+  } catch (_) {
+    if (!mounted) return;
+
+    setState(() {
+      workoutStreak = {
+        "current_streak": 0,
+        "last_training_date": null,
+        "trained_today": false,
+        "trained_yesterday": false,
+      };
+      isLoadingStreak = false;
+    });
+  }
+}
+
+
 
   Future<void> _loadUpcomingScheduledWorkouts() async {
     try {
@@ -255,6 +292,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
     await Future.wait([
       _loadActiveWorkout(),
       _loadWorkoutSummary(),
+      _loadWorkoutStreak(),
       _loadUpcomingScheduledWorkouts(),
     ]);
   }
@@ -386,6 +424,24 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
     _refreshWorkoutData();
   }
 
+  void _openWorkoutStats() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => const WorkoutStatsView(),
+    ),
+  );
+}
+
+  void _openWorkoutHistory() {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => const WorkoutHistoryView(),
+    ),
+  );
+}
+
   String _formatUpcomingDate(DateTime date) {
     final now = DateTime.now();
 
@@ -513,7 +569,9 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                         ),
                         const SizedBox(height: 18),
                         Expanded(
-                          child: _WeeklyChart(),
+                          child: _WeeklyChart(
+                            dailySummary: workoutSummary?["daily_summary"] as List? ?? [],
+                          ),
                         ),
                       ],
                     ),
@@ -548,6 +606,12 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
                     ),
                     const SizedBox(height: 22),
                     _buildSummaryCards(),
+                    const SizedBox(height: 14),
+                    _buildStreakCard(),
+                    const SizedBox(height: 14),
+                    _buildHistoryShortcutCard(),
+                    const SizedBox(height: 14),
+                    _buildStatsShortcutCard(),
                     const SizedBox(height: 22),
                     _buildDailyScheduleCard(),
                     const SizedBox(height: 26),
@@ -603,6 +667,232 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
       ],
     );
   }
+
+Widget _buildStreakCard() {
+  final currentStreak = _parseInt(workoutStreak?["current_streak"]) ?? 0;
+  final trainedToday = workoutStreak?["trained_today"] == true;
+  final trainedYesterday = workoutStreak?["trained_yesterday"] == true;
+  final lastTrainingDate = workoutStreak?["last_training_date"]?.toString();
+
+  String title;
+  String subtitle;
+  IconData icon;
+  Color color;
+
+  if (isLoadingStreak) {
+    title = "Cargando racha...";
+    subtitle = "Estamos calculando tu constancia reciente";
+    icon = Icons.local_fire_department_rounded;
+    color = TColor.primaryColor1;
+  } else if (currentStreak <= 0) {
+    title = "Sin racha activa";
+    subtitle = lastTrainingDate == null
+        ? "Completa un entrenamiento para empezar tu racha"
+        : "Último entrenamiento: $lastTrainingDate";
+    icon = Icons.local_fire_department_outlined;
+    color = TColor.gray;
+  } else {
+    title = "$currentStreak ${currentStreak == 1 ? "día" : "días"} de racha";
+
+    if (trainedToday) {
+      subtitle = "Has entrenado hoy. Sigue manteniendo el ritmo.";
+    } else if (trainedYesterday) {
+      subtitle = "Entrenaste ayer. Entrena hoy para no perder la racha.";
+    } else {
+      subtitle = "Sigue completando entrenamientos para mejorar tu racha.";
+    }
+
+    icon = Icons.local_fire_department_rounded;
+    color = Colors.orangeAccent;
+  }
+
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(22),
+      border: Border.all(
+        color: color.withOpacity(0.14),
+      ),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: TColor.white,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Icon(
+            icon,
+            color: color,
+            size: 30,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: TColor.black,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: TColor.gray,
+                  fontSize: 12,
+                  height: 1.3,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildHistoryShortcutCard() {
+  return InkWell(
+    borderRadius: BorderRadius.circular(22),
+    onTap: _openWorkoutHistory,
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TColor.primaryColor1.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: TColor.primaryColor1.withOpacity(0.12),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: TColor.white,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(
+              Icons.history_rounded,
+              color: TColor.primaryColor1,
+              size: 30,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Historial de entrenamientos",
+                  style: TextStyle(
+                    color: TColor.black,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Consulta tus sesiones completadas y tu progreso reciente",
+                  style: TextStyle(
+                    color: TColor.gray,
+                    fontSize: 12,
+                    height: 1.3,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.arrow_forward_ios_rounded,
+            color: TColor.gray,
+            size: 16,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _buildStatsShortcutCard() {
+  return InkWell(
+    borderRadius: BorderRadius.circular(22),
+    onTap: _openWorkoutStats,
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: TColor.primaryColor1.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: TColor.primaryColor1.withOpacity(0.12),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: TColor.white,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(
+              Icons.insights_rounded,
+              color: TColor.primaryColor1,
+              size: 30,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Estadísticas completas",
+                  style: TextStyle(
+                    color: TColor.black,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Consulta tu progreso semanal, mensual e histórico",
+                  style: TextStyle(
+                    color: TColor.gray,
+                    fontSize: 12,
+                    height: 1.3,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.arrow_forward_ios_rounded,
+            color: TColor.gray,
+            size: 16,
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _buildDailyScheduleCard() {
     final hasActiveWorkout = activeWorkout != null;
@@ -958,12 +1248,76 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
 }
 
 class _WeeklyChart extends StatelessWidget {
+  final List<dynamic> dailySummary;
+
+  const _WeeklyChart({
+    required this.dailySummary,
+  });
+
+  int _parseInt(dynamic value) {
+    if (value == null) return 0;
+
+    if (value is int) return value;
+
+    return int.tryParse(value.toString()) ?? 0;
+  }
+
+  List<FlSpot> _buildSpots() {
+    final valuesByDay = <int, int>{};
+
+    for (final item in dailySummary) {
+      if (item is Map<String, dynamic>) {
+        final dayIndex = _parseInt(item["day_index"]);
+        final minutes = _parseInt(item["total_minutes"]);
+
+        if (dayIndex >= 1 && dayIndex <= 7) {
+          valuesByDay[dayIndex] = minutes;
+        }
+      } else if (item is Map) {
+        final map = Map<String, dynamic>.from(item);
+        final dayIndex = _parseInt(map["day_index"]);
+        final minutes = _parseInt(map["total_minutes"]);
+
+        if (dayIndex >= 1 && dayIndex <= 7) {
+          valuesByDay[dayIndex] = minutes;
+        }
+      }
+    }
+
+    return List.generate(7, (index) {
+      final dayIndex = index + 1;
+      final minutes = valuesByDay[dayIndex] ?? 0;
+
+      return FlSpot(dayIndex.toDouble(), minutes.toDouble());
+    });
+  }
+
+  double _calculateMaxY(List<FlSpot> spots) {
+    final maxValue = spots.fold<double>(
+      0,
+      (currentMax, spot) => spot.y > currentMax ? spot.y : currentMax,
+    );
+
+    if (maxValue <= 0) {
+      return 10;
+    }
+
+    if (maxValue < 30) {
+      return 30;
+    }
+
+    return maxValue + 15;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final spots = _buildSpots();
+    final maxY = _calculateMaxY(spots);
+
     return LineChart(
       LineChartData(
         minY: 0,
-        maxY: 100,
+        maxY: maxY,
         lineTouchData: LineTouchData(
           enabled: true,
           touchTooltipData: LineTouchTooltipData(
@@ -972,7 +1326,7 @@ class _WeeklyChart extends StatelessWidget {
             getTooltipItems: (spots) {
               return spots.map((spot) {
                 return LineTooltipItem(
-                  "${spot.y.toInt()}%",
+                  "${spot.y.toInt()} min",
                   const TextStyle(
                     color: Colors.white,
                     fontSize: 11,
@@ -1046,7 +1400,7 @@ class _WeeklyChart extends StatelessWidget {
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
-          horizontalInterval: 25,
+          horizontalInterval: maxY <= 30 ? 10 : 30,
           getDrawingHorizontalLine: (value) {
             return FlLine(
               color: TColor.white.withOpacity(0.14),
@@ -1061,20 +1415,12 @@ class _WeeklyChart extends StatelessWidget {
             color: TColor.white,
             barWidth: 4,
             isStrokeCapRound: true,
-            dotData: FlDotData(show: false),
+            dotData: FlDotData(show: true),
             belowBarData: BarAreaData(
               show: true,
               color: TColor.white.withOpacity(0.12),
             ),
-            spots: const [
-              FlSpot(1, 30),
-              FlSpot(2, 55),
-              FlSpot(3, 42),
-              FlSpot(4, 70),
-              FlSpot(5, 58),
-              FlSpot(6, 85),
-              FlSpot(7, 72),
-            ],
+            spots: spots,
           ),
         ],
       ),

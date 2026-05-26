@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -40,6 +40,66 @@ def _get_today_range():
     today_end = datetime.combine(today, time.max)
 
     return today_start, today_end
+
+
+def _get_current_week_range():
+    today = datetime.utcnow().date()
+
+    week_start_date = today - timedelta(days=today.weekday())
+    week_end_date = week_start_date + timedelta(days=6)
+
+    week_start = datetime.combine(week_start_date, time.min)
+    week_end = datetime.combine(week_end_date, time.max)
+
+    return week_start, week_end
+
+
+def _get_current_month_range():
+    today = datetime.utcnow().date()
+
+    month_start_date = today.replace(day=1)
+
+    if today.month == 12:
+        next_month_start_date = today.replace(
+            year=today.year + 1,
+            month=1,
+            day=1,
+        )
+    else:
+        next_month_start_date = today.replace(
+            month=today.month + 1,
+            day=1,
+        )
+
+    month_end_date = next_month_start_date - timedelta(days=1)
+
+    month_start = datetime.combine(month_start_date, time.min)
+    month_end = datetime.combine(month_end_date, time.max)
+
+    return month_start, month_end
+
+
+def _build_sessions_summary(sessions: List[WorkoutSession]):
+    total_sessions = len(sessions)
+
+    total_minutes = sum(
+        session.duration_minutes or 0
+        for session in sessions
+    )
+
+    total_completed_exercises = sum(
+        session.completed_exercises or 0
+        for session in sessions
+    )
+
+    estimated_kcal = total_minutes * 6
+
+    return {
+        "total_sessions": total_sessions,
+        "total_minutes": total_minutes,
+        "total_completed_exercises": total_completed_exercises,
+        "estimated_kcal": estimated_kcal,
+    }
 
 
 def _find_existing_session_today(
@@ -162,23 +222,192 @@ def get_workout_sessions_summary(
         .all()
     )
 
-    total_sessions = len(sessions)
+    return _build_sessions_summary(sessions)
 
-    total_minutes = sum(
-        session.duration_minutes or 0
-        for session in sessions
+
+@router.get("/weekly-summary")
+def get_workout_sessions_weekly_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    week_start, week_end = _get_current_week_range()
+
+    sessions = (
+        db.query(WorkoutSession)
+        .filter(
+            WorkoutSession.user_id == current_user.id,
+            WorkoutSession.completed_at >= week_start,
+            WorkoutSession.completed_at <= week_end,
+        )
+        .all()
     )
 
-    total_completed_exercises = sum(
-        session.completed_exercises or 0
-        for session in sessions
-    )
+    weekly_summary = _build_sessions_summary(sessions)
 
-    estimated_kcal = total_minutes * 6
+    daily_summary = []
+
+    for index in range(7):
+        day_start = week_start + timedelta(days=index)
+        day_end = datetime.combine(day_start.date(), time.max)
+
+        day_sessions = [
+            session
+            for session in sessions
+            if day_start <= session.completed_at <= day_end
+        ]
+
+        day_summary = _build_sessions_summary(day_sessions)
+
+        daily_summary.append({
+            "date": day_start.date().isoformat(),
+            "day_index": index + 1,
+            "total_sessions": day_summary["total_sessions"],
+            "total_minutes": day_summary["total_minutes"],
+            "total_completed_exercises": day_summary["total_completed_exercises"],
+            "estimated_kcal": day_summary["estimated_kcal"],
+        })
 
     return {
-        "total_sessions": total_sessions,
-        "total_minutes": total_minutes,
-        "total_completed_exercises": total_completed_exercises,
-        "estimated_kcal": estimated_kcal,
+        "week_start": week_start.date().isoformat(),
+        "week_end": week_end.date().isoformat(),
+        "total_sessions": weekly_summary["total_sessions"],
+        "total_minutes": weekly_summary["total_minutes"],
+        "total_completed_exercises": weekly_summary["total_completed_exercises"],
+        "estimated_kcal": weekly_summary["estimated_kcal"],
+        "daily_summary": daily_summary,
+    }
+
+
+@router.get("/streak")
+def get_workout_sessions_streak(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    sessions = (
+        db.query(WorkoutSession)
+        .filter(WorkoutSession.user_id == current_user.id)
+        .order_by(WorkoutSession.completed_at.desc())
+        .all()
+    )
+
+    if not sessions:
+        return {
+            "current_streak": 0,
+            "last_training_date": None,
+            "trained_today": False,
+            "trained_yesterday": False,
+        }
+
+    training_dates = sorted(
+        {
+            session.completed_at.date()
+            for session in sessions
+            if session.completed_at is not None
+        },
+        reverse=True,
+    )
+
+    if not training_dates:
+        return {
+            "current_streak": 0,
+            "last_training_date": None,
+            "trained_today": False,
+            "trained_yesterday": False,
+        }
+
+    today = datetime.utcnow().date()
+    yesterday = today - timedelta(days=1)
+
+    trained_today = today in training_dates
+    trained_yesterday = yesterday in training_dates
+
+    last_training_date = training_dates[0]
+
+    if not trained_today and not trained_yesterday:
+        return {
+            "current_streak": 0,
+            "last_training_date": last_training_date.isoformat(),
+            "trained_today": False,
+            "trained_yesterday": False,
+        }
+
+    current_streak = 0
+
+    if trained_today:
+        expected_date = today
+    else:
+        expected_date = yesterday
+
+    training_dates_set = set(training_dates)
+
+    while expected_date in training_dates_set:
+        current_streak += 1
+        expected_date = expected_date - timedelta(days=1)
+
+    return {
+        "current_streak": current_streak,
+        "last_training_date": last_training_date.isoformat(),
+        "trained_today": trained_today,
+        "trained_yesterday": trained_yesterday,
+    }
+
+
+@router.get("/monthly-summary")
+def get_workout_sessions_monthly_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    month_start, month_end = _get_current_month_range()
+
+    sessions = (
+        db.query(WorkoutSession)
+        .filter(
+            WorkoutSession.user_id == current_user.id,
+            WorkoutSession.completed_at >= month_start,
+            WorkoutSession.completed_at <= month_end,
+        )
+        .all()
+    )
+
+    monthly_summary = _build_sessions_summary(sessions)
+
+    weekly_summary = []
+    current_week_start = month_start
+    week_index = 1
+
+    while current_week_start <= month_end:
+        current_week_end = current_week_start + timedelta(days=6)
+
+        if current_week_end > month_end:
+            current_week_end = month_end
+
+        week_sessions = [
+            session
+            for session in sessions
+            if current_week_start <= session.completed_at <= current_week_end
+        ]
+
+        week_summary = _build_sessions_summary(week_sessions)
+
+        weekly_summary.append({
+            "week_index": week_index,
+            "week_start": current_week_start.date().isoformat(),
+            "week_end": current_week_end.date().isoformat(),
+            "total_sessions": week_summary["total_sessions"],
+            "total_minutes": week_summary["total_minutes"],
+            "total_completed_exercises": week_summary["total_completed_exercises"],
+            "estimated_kcal": week_summary["estimated_kcal"],
+        })
+
+        current_week_start = current_week_end + timedelta(days=1)
+        week_index += 1
+
+    return {
+        "month_start": month_start.date().isoformat(),
+        "month_end": month_end.date().isoformat(),
+        "total_sessions": monthly_summary["total_sessions"],
+        "total_minutes": monthly_summary["total_minutes"],
+        "total_completed_exercises": monthly_summary["total_completed_exercises"],
+        "estimated_kcal": monthly_summary["estimated_kcal"],
+        "weekly_summary": weekly_summary,
     }

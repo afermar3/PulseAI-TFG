@@ -140,4 +140,87 @@ class WorkoutSessionService {
 
     throw Exception(data["detail"] ?? "No se ha podido cargar el resumen");
   }
+
+  static Future<Map<String, dynamic>> getWeeklyWorkoutSummary() async {
+    final token = await TokenStorage.getToken();
+
+    if (token == null) {
+      throw Exception("No hay sesión iniciada");
+    }
+
+    final url = Uri.parse(
+      "${ApiClient.baseUrl}/workout-sessions/weekly-summary",
+    );
+
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data as Map<String, dynamic>;
+    }
+
+    throw Exception(
+      data["detail"] ?? "No se ha podido cargar el resumen semanal",
+    );
+  }
+
+  static Future<Map<String, dynamic>> getWorkoutStreak() async {
+    final token = await TokenStorage.getToken();
+
+    if (token == null) {
+      throw Exception("No hay sesión iniciada");
+    }
+
+    final url = Uri.parse("${ApiClient.baseUrl}/workout-sessions/streak");
+
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data as Map<String, dynamic>;
+    }
+
+    throw Exception(data["detail"] ?? "No se ha podido cargar la racha");
+  }
+  
+  static Future<Map<String, dynamic>> getMonthlyWorkoutSummary() async {
+    final token = await TokenStorage.getToken();
+
+    if (token == null) {
+      throw Exception("No hay sesión iniciada");
+    }
+
+    final url = Uri.parse(
+      "${ApiClient.baseUrl}/workout-sessions/monthly-summary",
+    );
+
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data as Map<String, dynamic>;
+    }
+
+    throw Exception(
+      data["detail"] ?? "No se ha podido cargar el resumen mensual",
+    );
+  }
 }
