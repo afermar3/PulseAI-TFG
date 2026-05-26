@@ -10,6 +10,7 @@ from app.database.models import SavedWorkout, User
 from app.schemas.workout_plan_schema import (
     WorkoutPlanCreate,
     WorkoutPlanResponse,
+    WorkoutPlanUpdate,
 )
 
 router = APIRouter(
@@ -32,6 +33,29 @@ def _saved_workout_to_response(saved_workout: SavedWorkout) -> WorkoutPlanRespon
         is_active=bool(saved_workout.is_active),
         created_at=saved_workout.created_at,
     )
+
+
+def _get_user_saved_workout_or_404(
+    workout_id: int,
+    current_user: User,
+    db: Session,
+) -> SavedWorkout:
+    saved_workout = (
+        db.query(SavedWorkout)
+        .filter(
+            SavedWorkout.id == workout_id,
+            SavedWorkout.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not saved_workout:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Rutina no encontrada",
+        )
+
+    return saved_workout
 
 
 @router.post("", response_model=WorkoutPlanResponse)
@@ -100,26 +124,77 @@ def get_active_workout_plan(
     return _saved_workout_to_response(active_workout)
 
 
+@router.get("/{workout_id}", response_model=WorkoutPlanResponse)
+def get_workout_plan_by_id(
+    workout_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    saved_workout = _get_user_saved_workout_or_404(
+        workout_id=workout_id,
+        current_user=current_user,
+        db=db,
+    )
+
+    return _saved_workout_to_response(saved_workout)
+
+
+@router.patch("/{workout_id}", response_model=WorkoutPlanResponse)
+def update_workout_plan(
+    workout_id: int,
+    data: WorkoutPlanUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    saved_workout = _get_user_saved_workout_or_404(
+        workout_id=workout_id,
+        current_user=current_user,
+        db=db,
+    )
+
+    update_data = data.model_dump(exclude_unset=True)
+
+    if "title" in update_data and update_data["title"] is not None:
+        saved_workout.title = update_data["title"]
+
+    if "summary" in update_data:
+        saved_workout.summary = update_data["summary"]
+
+    if "goal" in update_data:
+        saved_workout.goal = update_data["goal"]
+
+    if "level" in update_data:
+        saved_workout.level = update_data["level"]
+
+    if "days_per_week" in update_data:
+        saved_workout.days_per_week = update_data["days_per_week"]
+
+    if "duration_minutes" in update_data:
+        saved_workout.duration_minutes = update_data["duration_minutes"]
+
+    if "content" in update_data and update_data["content"] is not None:
+        saved_workout.content_json = json.dumps(
+            update_data["content"],
+            ensure_ascii=False,
+        )
+
+    db.commit()
+    db.refresh(saved_workout)
+
+    return _saved_workout_to_response(saved_workout)
+
+
 @router.patch("/{workout_id}/activate", response_model=WorkoutPlanResponse)
 def activate_workout_plan(
     workout_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    workout_to_activate = (
-        db.query(SavedWorkout)
-        .filter(
-            SavedWorkout.id == workout_id,
-            SavedWorkout.user_id == current_user.id,
-        )
-        .first()
+    workout_to_activate = _get_user_saved_workout_or_404(
+        workout_id=workout_id,
+        current_user=current_user,
+        db=db,
     )
-
-    if not workout_to_activate:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rutina no encontrada",
-        )
 
     db.query(SavedWorkout).filter(
         SavedWorkout.user_id == current_user.id,
@@ -137,50 +212,17 @@ def activate_workout_plan(
     return _saved_workout_to_response(workout_to_activate)
 
 
-@router.get("/{workout_id}", response_model=WorkoutPlanResponse)
-def get_workout_plan_by_id(
-    workout_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    saved_workout = (
-        db.query(SavedWorkout)
-        .filter(
-            SavedWorkout.id == workout_id,
-            SavedWorkout.user_id == current_user.id,
-        )
-        .first()
-    )
-
-    if not saved_workout:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rutina no encontrada",
-        )
-
-    return _saved_workout_to_response(saved_workout)
-
-
 @router.delete("/{workout_id}")
 def delete_workout_plan(
     workout_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    saved_workout = (
-        db.query(SavedWorkout)
-        .filter(
-            SavedWorkout.id == workout_id,
-            SavedWorkout.user_id == current_user.id,
-        )
-        .first()
+    saved_workout = _get_user_saved_workout_or_404(
+        workout_id=workout_id,
+        current_user=current_user,
+        db=db,
     )
-
-    if not saved_workout:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Rutina no encontrada",
-        )
 
     db.delete(saved_workout)
     db.commit()

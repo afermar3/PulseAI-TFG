@@ -1,6 +1,7 @@
 import 'package:afermar3_tf_ipc/IA/ai_generated_workout_view.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/services/workout_plan_service.dart';
+import 'package:afermar3_tf_ipc/workout_tracker/manual_workout_builder_view.dart';
 import 'package:flutter/material.dart';
 
 class SavedWorkoutsView extends StatefulWidget {
@@ -27,6 +28,30 @@ class _SavedWorkoutsViewState extends State<SavedWorkoutsView> {
     setState(() {
       _loadSavedWorkouts();
     });
+  }
+
+  bool _isManualWorkout(Map<String, dynamic> workout) {
+    final content = _getWorkoutContent(workout);
+
+    final rawSource = workout["source"]?.toString() ??
+        content["source"]?.toString() ??
+        "";
+
+    return rawSource.toUpperCase() == "MANUAL";
+  }
+
+  Map<String, dynamic> _getWorkoutContent(Map<String, dynamic> workout) {
+    final rawContent = workout["content"];
+
+    if (rawContent is Map<String, dynamic>) {
+      return rawContent;
+    }
+
+    if (rawContent is Map) {
+      return Map<String, dynamic>.from(rawContent);
+    }
+
+    return {};
   }
 
   Future<void> _deleteWorkout(int workoutId) async {
@@ -58,9 +83,9 @@ class _SavedWorkoutsViewState extends State<SavedWorkoutsView> {
   }
 
   Future<void> _openWorkout(Map<String, dynamic> savedWorkout) async {
-    final content = savedWorkout["content"] as Map<String, dynamic>?;
+    final content = _getWorkoutContent(savedWorkout);
 
-    if (content == null) {
+    if (content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("No se ha podido abrir la rutina"),
@@ -83,6 +108,115 @@ class _SavedWorkoutsViewState extends State<SavedWorkoutsView> {
 
     if (result == true && mounted) {
       _refresh();
+    }
+  }
+
+  Future<void> _editManualWorkout(Map<String, dynamic> savedWorkout) async {
+    final workoutId = savedWorkout["id"];
+
+    if (workoutId is! int) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("No se ha podido editar la rutina"),
+        ),
+      );
+      return;
+    }
+
+    final content = _getWorkoutContent(savedWorkout);
+
+    if (content.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("No se ha podido cargar el contenido de la rutina"),
+        ),
+      );
+      return;
+    }
+
+    final existingWorkout = Map<String, dynamic>.from(savedWorkout);
+    existingWorkout["content"] = content;
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ManualWorkoutBuilderView(
+          workoutId: workoutId,
+          existingWorkout: existingWorkout,
+        ),
+      ),
+    );
+
+    if (result == true && mounted) {
+      _refresh();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("Rutina actualizada correctamente"),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _duplicateWorkout(Map<String, dynamic> savedWorkout) async {
+    try {
+      final content = _getWorkoutContent(savedWorkout);
+
+      if (content.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("No se ha podido duplicar la rutina"),
+          ),
+        );
+        return;
+      }
+
+      final originalTitle = savedWorkout["title"]?.toString() ??
+          content["title"]?.toString() ??
+          "Rutina";
+
+      final duplicatedContent = Map<String, dynamic>.from(content);
+
+      duplicatedContent["title"] = "Copia de $originalTitle";
+      duplicatedContent["summary"] = content["summary"]?.toString() ??
+          savedWorkout["summary"]?.toString() ??
+          "Copia de una rutina guardada.";
+      duplicatedContent["goal"] = content["goal"] ?? savedWorkout["goal"];
+      duplicatedContent["level"] = content["level"] ?? savedWorkout["level"];
+      duplicatedContent["days_per_week"] =
+          content["days_per_week"] ?? savedWorkout["days_per_week"];
+      duplicatedContent["duration_minutes"] =
+          content["duration_minutes"] ?? savedWorkout["duration_minutes"];
+
+      await WorkoutPlanService.saveWorkoutPlan(
+        workout: duplicatedContent,
+      );
+
+      if (!mounted) return;
+
+      _refresh();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("Rutina duplicada correctamente"),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -123,6 +257,129 @@ class _SavedWorkoutsViewState extends State<SavedWorkoutsView> {
     );
   }
 
+  void _openWorkoutActions(Map<String, dynamic> workout) {
+    final isManual = _isManualWorkout(workout);
+    final isActive = workout["is_active"] == true;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(22, 14, 22, 24),
+          decoration: BoxDecoration(
+            color: TColor.blanco,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(28),
+              topRight: Radius.circular(28),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 46,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: TColor.gris.withOpacity(0.25),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        workout["title"]?.toString() ?? "Rutina guardada",
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: TColor.negro,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        color: TColor.gris,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _WorkoutActionButton(
+                  icon: Icons.visibility_rounded,
+                  title: "Ver rutina",
+                  subtitle: "Abrir el detalle completo de la rutina",
+                  color: TColor.rojo,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openWorkout(workout);
+                  },
+                ),
+                const SizedBox(height: 10),
+                _WorkoutActionButton(
+                  icon: Icons.copy_rounded,
+                  title: "Duplicar rutina",
+                  subtitle: "Crear una copia editable de esta rutina",
+                  color: Colors.orangeAccent,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _duplicateWorkout(workout);
+                  },
+                ),
+                if (isManual) ...[
+                  const SizedBox(height: 10),
+                  _WorkoutActionButton(
+                    icon: Icons.edit_note_rounded,
+                    title: "Editar rutina manual",
+                    subtitle: "Cambiar días, ejercicios, series y descansos",
+                    color: Colors.blueAccent,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _editManualWorkout(workout);
+                    },
+                  ),
+                ],
+                const SizedBox(height: 10),
+                _WorkoutActionButton(
+                  icon: isActive
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  title: isActive ? "Rutina activa" : "No activa",
+                  subtitle: isActive
+                      ? "Esta es la rutina activa actualmente"
+                      : "Puedes activarla desde el detalle de la rutina",
+                  color: isActive ? Colors.green : TColor.gris,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openWorkout(workout);
+                  },
+                ),
+                const SizedBox(height: 10),
+                _WorkoutActionButton(
+                  icon: Icons.delete_outline_rounded,
+                  title: "Eliminar rutina",
+                  subtitle: "Borrar esta rutina guardada",
+                  color: Colors.redAccent,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _confirmDelete(workout);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -146,6 +403,15 @@ class _SavedWorkoutsViewState extends State<SavedWorkoutsView> {
             color: TColor.negro,
           ),
         ),
+        actions: [
+          IconButton(
+            onPressed: _refresh,
+            icon: Icon(
+              Icons.refresh_rounded,
+              color: TColor.rojo,
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: FutureBuilder<List<dynamic>>(
@@ -181,12 +447,19 @@ class _SavedWorkoutsViewState extends State<SavedWorkoutsView> {
                 itemCount: workouts.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 14),
                 itemBuilder: (context, index) {
-                  final workout = workouts[index] as Map<String, dynamic>;
+                  final workout = Map<String, dynamic>.from(
+                    workouts[index] as Map,
+                  );
 
                   return _SavedWorkoutCard(
                     workout: workout,
                     onTap: () => _openWorkout(workout),
                     onDelete: () => _confirmDelete(workout),
+                    onMore: () => _openWorkoutActions(workout),
+                    onDuplicate: () => _duplicateWorkout(workout),
+                    onEdit: _isManualWorkout(workout)
+                        ? () => _editManualWorkout(workout)
+                        : null,
                   );
                 },
               ),
@@ -202,11 +475,17 @@ class _SavedWorkoutCard extends StatelessWidget {
   final Map<String, dynamic> workout;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final VoidCallback onMore;
+  final VoidCallback onDuplicate;
+  final VoidCallback? onEdit;
 
   const _SavedWorkoutCard({
     required this.workout,
     required this.onTap,
     required this.onDelete,
+    required this.onMore,
+    required this.onDuplicate,
+    this.onEdit,
   });
 
   Map<String, dynamic> get content {
@@ -344,10 +623,73 @@ class _SavedWorkoutCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  onPressed: onDelete,
-                  icon: Icon(
-                    Icons.delete_outline_rounded,
+                PopupMenuButton<String>(
+                  color: TColor.blanco,
+                  elevation: 8,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  onSelected: (value) {
+                    if (value == "view") {
+                      onTap();
+                    } else if (value == "duplicate") {
+                      onDuplicate();
+                    } else if (value == "edit") {
+                      onEdit?.call();
+                    } else if (value == "delete") {
+                      onDelete();
+                    }
+                  },
+                  itemBuilder: (context) {
+                    return [
+                      const PopupMenuItem(
+                        value: "view",
+                        child: Row(
+                          children: [
+                            Icon(Icons.visibility_rounded),
+                            SizedBox(width: 10),
+                            Text("Ver"),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: "duplicate",
+                        child: Row(
+                          children: [
+                            Icon(Icons.copy_rounded),
+                            SizedBox(width: 10),
+                            Text("Duplicar"),
+                          ],
+                        ),
+                      ),
+                      if (onEdit != null)
+                        const PopupMenuItem(
+                          value: "edit",
+                          child: Row(
+                            children: [
+                              Icon(Icons.edit_note_rounded),
+                              SizedBox(width: 10),
+                              Text("Editar"),
+                            ],
+                          ),
+                        ),
+                      const PopupMenuItem(
+                        value: "delete",
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete_outline_rounded,
+                              color: Colors.redAccent,
+                            ),
+                            SizedBox(width: 10),
+                            Text("Eliminar"),
+                          ],
+                        ),
+                      ),
+                    ];
+                  },
+                  child: Icon(
+                    Icons.more_vert_rounded,
                     color: TColor.gris,
                   ),
                 ),
@@ -380,6 +722,102 @@ class _SavedWorkoutCard extends StatelessWidget {
                   text: level,
                 ),
               ],
+            ),
+            if (onEdit != null) ...[
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                height: 42,
+                child: OutlinedButton.icon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_note_rounded, size: 18),
+                  label: const Text("Editar rutina manual"),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blueAccent,
+                    side: const BorderSide(
+                      color: Colors.blueAccent,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkoutActionButton extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _WorkoutActionButton({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: color.withOpacity(0.16),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: color,
+              size: 26,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: TColor.negro,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: TColor.gris,
+                      fontSize: 11,
+                      height: 1.25,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: color,
+              size: 15,
             ),
           ],
         ),
@@ -525,7 +963,7 @@ class _EmptyView extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            "Genera una rutina con PulseAI y guárdala para verla aquí.",
+            "Genera una rutina con PulseAI o crea una rutina manual y guárdala para verla aquí.",
             textAlign: TextAlign.center,
             style: TextStyle(
               color: TColor.gris,

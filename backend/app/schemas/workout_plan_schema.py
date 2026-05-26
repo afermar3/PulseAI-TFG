@@ -14,6 +14,16 @@ class WorkoutPlanCreate(BaseModel):
     content: Dict[str, Any]
 
 
+class WorkoutPlanUpdate(BaseModel):
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    goal: Optional[str] = None
+    level: Optional[str] = None
+    days_per_week: Optional[int] = None
+    duration_minutes: Optional[int] = None
+    content: Optional[Dict[str, Any]] = None
+
+
 class WorkoutPlanResponse(BaseModel):
     id: int
     user_id: int

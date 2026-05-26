@@ -43,6 +43,44 @@ class WorkoutPlanService {
     throw Exception(data["detail"] ?? "No se ha podido guardar la rutina");
   }
 
+  static Future<Map<String, dynamic>> updateWorkoutPlan({
+    required int workoutId,
+    required Map<String, dynamic> workout,
+  }) async {
+    final token = await TokenStorage.getToken();
+
+    if (token == null) {
+      throw Exception("No hay sesión iniciada");
+    }
+
+    final url = Uri.parse("${ApiClient.baseUrl}/workout-plans/$workoutId");
+
+    final response = await http.patch(
+      url,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({
+        "title": workout["title"] ?? "Rutina personalizada",
+        "summary": workout["summary"],
+        "goal": workout["goal"],
+        "level": workout["level"],
+        "days_per_week": workout["days_per_week"],
+        "duration_minutes": workout["duration_minutes"],
+        "content": workout,
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data as Map<String, dynamic>;
+    }
+
+    throw Exception(data["detail"] ?? "No se ha podido actualizar la rutina");
+  }
+
   static Future<List<dynamic>> getMyWorkoutPlans() async {
     final token = await TokenStorage.getToken();
 

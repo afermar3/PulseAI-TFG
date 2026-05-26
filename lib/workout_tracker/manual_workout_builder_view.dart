@@ -4,7 +4,14 @@ import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:flutter/material.dart';
 
 class ManualWorkoutBuilderView extends StatefulWidget {
-  const ManualWorkoutBuilderView({super.key});
+  final int? workoutId;
+  final Map<String, dynamic>? existingWorkout;
+
+  const ManualWorkoutBuilderView({
+    super.key,
+    this.workoutId,
+    this.existingWorkout,
+  });
 
   @override
   State<ManualWorkoutBuilderView> createState() =>
@@ -29,6 +36,9 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
   List<Map<String, dynamic>> exercises = [];
   List<Map<String, dynamic>> days = [];
 
+  bool get isEditing =>
+      widget.workoutId != null && widget.existingWorkout != null;
+
   final List<String> goalOptions = [
     "Ganar músculo",
     "Perder grasa",
@@ -46,7 +56,13 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
   @override
   void initState() {
     super.initState();
-    _generateDays();
+
+    if (isEditing) {
+      _loadExistingWorkout();
+    } else {
+      _generateDays();
+    }
+
     _loadExercises();
   }
 
@@ -54,6 +70,99 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
   void dispose() {
     titleController.dispose();
     super.dispose();
+  }
+
+  int? _parseInt(dynamic value) {
+    if (value == null) return null;
+
+    if (value is int) return value;
+
+    return int.tryParse(value.toString());
+  }
+
+  Map<String, dynamic> _getExistingContent() {
+    final rawContent = widget.existingWorkout?["content"];
+
+    if (rawContent is Map<String, dynamic>) {
+      return rawContent;
+    }
+
+    if (rawContent is Map) {
+      return Map<String, dynamic>.from(rawContent);
+    }
+
+    return {};
+  }
+
+  void _loadExistingWorkout() {
+    final existingWorkout = widget.existingWorkout ?? {};
+    final content = _getExistingContent();
+
+    final title = existingWorkout["title"]?.toString() ??
+        content["title"]?.toString() ??
+        "Rutina manual";
+
+    titleController.text = title;
+
+    selectedGoal = existingWorkout["goal"]?.toString() ??
+        content["goal"]?.toString() ??
+        selectedGoal;
+
+    selectedLevel = existingWorkout["level"]?.toString() ??
+        content["level"]?.toString() ??
+        selectedLevel;
+
+    daysPerWeek = _parseInt(
+          existingWorkout["days_per_week"] ?? content["days_per_week"],
+        ) ??
+        4;
+
+    durationMinutes = _parseInt(
+          existingWorkout["duration_minutes"] ?? content["duration_minutes"],
+        ) ??
+        60;
+
+    final rawDays = content["days"];
+
+    if (rawDays is List && rawDays.isNotEmpty) {
+      days = rawDays.map((rawDay) {
+        Map<String, dynamic> day;
+
+        if (rawDay is Map<String, dynamic>) {
+          day = rawDay;
+        } else if (rawDay is Map) {
+          day = Map<String, dynamic>.from(rawDay);
+        } else {
+          day = {};
+        }
+
+        final rawExercises = day["exercises"];
+
+        final parsedExercises = <Map<String, dynamic>>[];
+
+        if (rawExercises is List) {
+          for (final rawExercise in rawExercises) {
+            if (rawExercise is Map<String, dynamic>) {
+              parsedExercises.add(Map<String, dynamic>.from(rawExercise));
+            } else if (rawExercise is Map) {
+              parsedExercises.add(Map<String, dynamic>.from(rawExercise));
+            }
+          }
+        }
+
+        return {
+          "day_number": _parseInt(day["day_number"]) ?? parsedExercises.length + 1,
+          "name": day["name"]?.toString() ?? "Día",
+          "focus": day["focus"]?.toString() ?? "Entrenamiento personalizado",
+          "exercises": parsedExercises,
+        };
+      }).toList();
+
+      daysPerWeek = days.length;
+      selectedDayIndex = 0;
+    } else {
+      _generateDays();
+    }
   }
 
   void _generateDays() {
@@ -67,6 +176,40 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
     });
 
     selectedDayIndex = 0;
+  }
+
+  void _resizeDays(int newValue) {
+    if (newValue == daysPerWeek) return;
+
+    final updatedDays = <Map<String, dynamic>>[];
+
+    for (int i = 0; i < newValue; i++) {
+      if (i < days.length) {
+        final current = Map<String, dynamic>.from(days[i]);
+        current["day_number"] = i + 1;
+        updatedDays.add(current);
+      } else {
+        updatedDays.add({
+          "day_number": i + 1,
+          "name": "Día ${i + 1}",
+          "focus": "Entrenamiento personalizado",
+          "exercises": <Map<String, dynamic>>[],
+        });
+      }
+    }
+
+    setState(() {
+      daysPerWeek = newValue;
+      days = updatedDays;
+
+      if (selectedDayIndex >= days.length) {
+        selectedDayIndex = days.length - 1;
+      }
+
+      if (selectedDayIndex < 0) {
+        selectedDayIndex = 0;
+      }
+    });
   }
 
   Future<void> _loadExercises() async {
@@ -114,13 +257,6 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
     return days.fold<int>(0, (sum, day) {
       final exercises = day["exercises"] as List? ?? [];
       return sum + exercises.length;
-    });
-  }
-
-  void _changeDaysPerWeek(int newValue) {
-    setState(() {
-      daysPerWeek = newValue;
-      _generateDays();
     });
   }
 
@@ -405,13 +541,41 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
     );
   }
 
-  void _showConfigureExerciseSheet(Map<String, dynamic> exercise) {
-    final setsController = TextEditingController(text: "3");
-    final repsController = TextEditingController(text: "10-12");
-    final restController = TextEditingController(text: "60");
-    final notesController = TextEditingController();
+  void _showConfigureExerciseSheet(
+    Map<String, dynamic> exercise, {
+    int? editIndex,
+  }) {
+    final isEditingExercise = editIndex != null;
 
-    final exerciseName = exercise["name"]?.toString() ?? "Ejercicio";
+    final setsController = TextEditingController(
+      text: isEditingExercise
+          ? currentDayExercises[editIndex]["sets"]?.toString() ?? "3"
+          : "3",
+    );
+
+    final repsController = TextEditingController(
+      text: isEditingExercise
+          ? currentDayExercises[editIndex]["reps"]?.toString() ?? "10-12"
+          : "10-12",
+    );
+
+    final restController = TextEditingController(
+      text: isEditingExercise
+          ? currentDayExercises[editIndex]["rest_seconds"]?.toString() ?? "60"
+          : "60",
+    );
+
+    final notesController = TextEditingController(
+      text: isEditingExercise
+          ? currentDayExercises[editIndex]["notes"]?.toString() ?? ""
+          : "",
+    );
+
+    final exerciseName = isEditingExercise
+        ? currentDayExercises[editIndex]["exercise_name"]?.toString() ??
+            currentDayExercises[editIndex]["name"]?.toString() ??
+            "Ejercicio"
+        : exercise["name"]?.toString() ?? "Ejercicio";
 
     showModalBottomSheet(
       context: context,
@@ -510,13 +674,13 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
                         onPressed: () {
                           final sets =
                               int.tryParse(setsController.text.trim()) ?? 3;
-                          final rest = int.tryParse(
-                                restController.text.trim(),
-                              ) ??
-                              60;
+                          final rest =
+                              int.tryParse(restController.text.trim()) ?? 60;
 
-                          final newExercise = {
-                            "exercise_id": exercise["id"],
+                          final configuredExercise = {
+                            "exercise_id": isEditingExercise
+                                ? currentDayExercises[editIndex]["exercise_id"]
+                                : exercise["id"],
                             "exercise_name": exerciseName,
                             "sets": sets,
                             "reps": repsController.text.trim().isEmpty
@@ -528,7 +692,12 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
 
                           setState(() {
                             final list = currentDay["exercises"] as List;
-                            list.add(newExercise);
+
+                            if (isEditingExercise) {
+                              list[editIndex] = configuredExercise;
+                            } else {
+                              list.add(configuredExercise);
+                            }
                           });
 
                           Navigator.pop(context);
@@ -541,9 +710,11 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
                             borderRadius: BorderRadius.circular(18),
                           ),
                         ),
-                        child: const Text(
-                          "Añadir ejercicio",
-                          style: TextStyle(
+                        child: Text(
+                          isEditingExercise
+                              ? "Guardar ejercicio"
+                              : "Añadir ejercicio",
+                          style: const TextStyle(
                             fontWeight: FontWeight.w900,
                           ),
                         ),
@@ -616,15 +787,26 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
     };
 
     try {
-      await WorkoutPlanService.saveWorkoutPlan(
-        workout: workout,
-      );
+      if (isEditing) {
+        await WorkoutPlanService.updateWorkoutPlan(
+          workoutId: widget.workoutId!,
+          workout: workout,
+        );
+      } else {
+        await WorkoutPlanService.saveWorkoutPlan(
+          workout: workout,
+        );
+      }
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text("Rutina manual guardada correctamente"),
+          content: Text(
+            isEditing
+                ? "Rutina manual actualizada correctamente"
+                : "Rutina manual guardada correctamente",
+          ),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
         ),
@@ -671,7 +853,7 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
           ),
         ),
         title: Text(
-          "Rutina manual",
+          isEditing ? "Editar rutina" : "Rutina manual",
           style: TextStyle(
             color: TColor.black,
             fontSize: 18,
@@ -768,12 +950,12 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
                                     subtitle: "por semana",
                                     onMinus: daysPerWeek <= 1
                                         ? null
-                                        : () => _changeDaysPerWeek(
+                                        : () => _resizeDays(
                                               daysPerWeek - 1,
                                             ),
                                     onPlus: daysPerWeek >= 7
                                         ? null
-                                        : () => _changeDaysPerWeek(
+                                        : () => _resizeDays(
                                               daysPerWeek + 1,
                                             ),
                                   ),
@@ -816,6 +998,9 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
                             ),
                             const SizedBox(height: 16),
                             _LargeInputField(
+                              key: ValueKey(
+                                "day_name_${selectedDayIndex}_${current["name"]}",
+                              ),
                               initialValue: current["name"]?.toString() ?? "",
                               label: "Nombre del día",
                               hint: "Ej: Tren superior A",
@@ -825,6 +1010,9 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
                             ),
                             const SizedBox(height: 12),
                             _LargeInputField(
+                              key: ValueKey(
+                                "day_focus_${selectedDayIndex}_${current["focus"]}",
+                              ),
                               initialValue: current["focus"]?.toString() ?? "",
                               label: "Enfoque",
                               hint: "Ej: Pecho, hombro y tríceps",
@@ -867,6 +1055,12 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
 
                                   return _ManualExerciseCard(
                                     exercise: exercise,
+                                    onEdit: () {
+                                      _showConfigureExerciseSheet(
+                                        exercise,
+                                        editIndex: index,
+                                      );
+                                    },
                                     onDelete: () {
                                       _removeExerciseFromCurrentDay(index);
                                     },
@@ -904,7 +1098,13 @@ class _ManualWorkoutBuilderViewState extends State<ManualWorkoutBuilderView> {
                             ),
                           ),
                           child: Text(
-                            isSaving ? "Guardando..." : "Guardar rutina",
+                            isSaving
+                                ? isEditing
+                                    ? "Actualizando..."
+                                    : "Guardando..."
+                                : isEditing
+                                    ? "Guardar cambios"
+                                    : "Guardar rutina",
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w900,
@@ -1264,10 +1464,12 @@ class _ExercisePickerCard extends StatelessWidget {
 
 class _ManualExerciseCard extends StatelessWidget {
   final Map<String, dynamic> exercise;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _ManualExerciseCard({
     required this.exercise,
+    required this.onEdit,
     required this.onDelete,
   });
 
@@ -1313,42 +1515,56 @@ class _ManualExerciseCard extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: TColor.black,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "$sets series · $reps reps · descanso $rest s",
-                  style: TextStyle(
-                    color: TColor.primaryColor1,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                if (notes.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    notes,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: TColor.gray,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: onEdit,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: TColor.black,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                  ),
-                ],
-              ],
+                    const SizedBox(height: 4),
+                    Text(
+                      "$sets series · $reps reps · descanso $rest s",
+                      style: TextStyle(
+                        color: TColor.primaryColor1,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (notes.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        notes,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: TColor.gray,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onEdit,
+            icon: Icon(
+              Icons.edit_note_rounded,
+              color: TColor.primaryColor1,
             ),
           ),
           IconButton(
@@ -1452,6 +1668,7 @@ class _LargeInputField extends StatelessWidget {
   final Function(String value)? onChanged;
 
   const _LargeInputField({
+    super.key,
     this.controller,
     this.initialValue,
     required this.label,
