@@ -4,7 +4,18 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.database.database import get_db
 from app.database.models import User, UserProfile
-from app.schemas.ai_chat_schema import AiChatRequest, AiChatResponse
+from app.schemas.ai_chat_schema import (
+    AiApplyActionRequest,
+    AiApplyActionResponse,
+    AiChatRequest,
+    AiChatResponse,
+)
+from app.services.ai_action_apply_service import apply_pending_action
+from app.services.ai_action_service import (
+    build_pending_action_answer,
+    detect_pending_action,
+)
+from app.services.ai_context_service import build_ai_user_context
 from app.services.ai_prompt_service import build_coach_prompt
 from app.services.gemini_text_service import generate_text_response
 
@@ -28,21 +39,43 @@ def send_ai_message(
             .first()
         )
 
-        prompt = build_coach_prompt(
+        app_context = build_ai_user_context(
+            db=db,
             user=current_user,
-            profile=profile,
+        )
+
+        pending_action = detect_pending_action(
+            db=db,
+            user=current_user,
             message=payload.message,
         )
 
-        answer = generate_text_response(prompt)
+        if pending_action is not None:
+            answer = build_pending_action_answer(pending_action)
+        else:
+            prompt = build_coach_prompt(
+                user=current_user,
+                profile=profile,
+                message=payload.message,
+                app_context=app_context,
+            )
 
+            answer = generate_text_response(prompt)
+
+        print("======== CONTEXTO IA PULSEAI ========")
+        print(app_context)
+        print("======== ACCIÓN PENDIENTE IA ========")
+        print(pending_action)
         print("======== RESPUESTA IA COMPLETA ========")
         print(answer)
         print("======== LONGITUD RESPUESTA ========")
         print(len(answer))
         print("======================================")
 
-        return AiChatResponse(answer=answer)
+        return AiChatResponse(
+            answer=answer,
+            pending_action=pending_action,
+        )
 
     except ValueError as e:
         raise HTTPException(
@@ -82,4 +115,35 @@ def send_ai_message(
         raise HTTPException(
             status_code=500,
             detail=f"Error generando respuesta IA: {error_text}",
+        )
+
+
+@router.post("/apply-action", response_model=AiApplyActionResponse)
+def apply_ai_action(
+    payload: AiApplyActionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        result = apply_pending_action(
+            db=db,
+            user=current_user,
+            pending_action=payload.pending_action.model_dump(),
+        )
+
+        return AiApplyActionResponse(**result)
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        error_text = str(e)
+
+        print("======== ERROR APLICANDO ACCIÓN IA ========")
+        print(error_text)
+        print("===========================================")
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error aplicando acción IA: {error_text}",
         )

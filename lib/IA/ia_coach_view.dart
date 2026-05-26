@@ -16,6 +16,7 @@ class _AiCoachViewState extends State<AiCoachView> {
   final ScrollController _scrollController = ScrollController();
 
   bool _isLoading = false;
+  bool _isApplyingAction = false;
 
   final List<Map<String, dynamic>> _messages = [
     {
@@ -55,10 +56,24 @@ class _AiCoachViewState extends State<AiCoachView> {
     super.dispose();
   }
 
+  Map<String, dynamic>? _safeMap(dynamic value) {
+    if (value == null) return null;
+
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+
+    if (value is Map) {
+      return Map<String, dynamic>.from(value);
+    }
+
+    return null;
+  }
+
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
 
-    if (text.isEmpty || _isLoading) return;
+    if (text.isEmpty || _isLoading || _isApplyingAction) return;
 
     setState(() {
       _messages.add({
@@ -79,7 +94,10 @@ class _AiCoachViewState extends State<AiCoachView> {
     _scrollToBottom();
 
     try {
-      final answer = await AiChatService.sendMessage(text);
+      final response = await AiChatService.sendMessage(text);
+
+      final answer = response["answer"]?.toString() ?? "";
+      final pendingAction = _safeMap(response["pending_action"]);
 
       if (!mounted) return;
 
@@ -88,16 +106,17 @@ class _AiCoachViewState extends State<AiCoachView> {
           (message) => message["isLoading"] == true,
         );
 
+        final botMessage = {
+          "isUser": false,
+          "text": answer,
+          "pendingAction": pendingAction,
+          "actionApplied": false,
+        };
+
         if (loadingIndex != -1) {
-          _messages[loadingIndex] = {
-            "isUser": false,
-            "text": answer,
-          };
+          _messages[loadingIndex] = botMessage;
         } else {
-          _messages.add({
-            "isUser": false,
-            "text": answer,
-          });
+          _messages.add(botMessage);
         }
       });
 
@@ -135,8 +154,80 @@ class _AiCoachViewState extends State<AiCoachView> {
     }
   }
 
+  Future<void> _applyPendingAction({
+    required int messageIndex,
+    required Map<String, dynamic> pendingAction,
+  }) async {
+    if (_isApplyingAction || _isLoading) return;
+
+    setState(() {
+      _isApplyingAction = true;
+    });
+
+    try {
+      final result = await AiChatService.applyPendingAction(
+        pendingAction: pendingAction,
+      );
+
+      final message = result["message"]?.toString() ??
+          "La acción se ha aplicado correctamente.";
+
+      if (!mounted) return;
+
+      final success = result["success"] == true;
+
+      setState(() {
+        if (success && messageIndex >= 0 && messageIndex < _messages.length) {
+          _messages[messageIndex]["actionApplied"] = true;
+        }
+
+        _messages.add({
+          "isUser": false,
+          "text": message,
+        });
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: success ? TColor.rojo : Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+
+      final errorMessage = e.toString().replaceFirst("Exception: ", "");
+
+      setState(() {
+        _messages.add({
+          "isUser": false,
+          "text": errorMessage,
+        });
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      _scrollToBottom();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isApplyingAction = false;
+        });
+      }
+    }
+  }
+
   void _sendQuickAction(String action) {
-    if (_isLoading) return;
+    if (_isLoading || _isApplyingAction) return;
 
     switch (action) {
       case "Crear rutina":
@@ -190,6 +281,15 @@ class _AiCoachViewState extends State<AiCoachView> {
       );
     });
   }
+
+bool _canApplyAction(Map<String, dynamic> action) {
+  final type = action["type"]?.toString();
+  final requiresConfirmation = action["requires_confirmation"] == true;
+
+  if (!requiresConfirmation) return false;
+
+  return type == "add_workout_day" || type == "add_exercise_to_day";
+}
 
   @override
   Widget build(BuildContext context) {
@@ -253,13 +353,38 @@ class _AiCoachViewState extends State<AiCoachView> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  ..._messages.map((message) {
+                  ...List.generate(_messages.length, (index) {
+                    final message = _messages[index];
                     final isLoadingMessage = message["isLoading"] == true;
+                    final isUser = message["isUser"] == true;
+                    final pendingAction = _safeMap(message["pendingAction"]);
+                    final actionApplied = message["actionApplied"] == true;
 
-                    return _ChatBubble(
-                      text: message["text"].toString(),
-                      isUser: message["isUser"] as bool,
-                      isLoading: isLoadingMessage,
+                    return Column(
+                      crossAxisAlignment: isUser
+                          ? CrossAxisAlignment.end
+                          : CrossAxisAlignment.start,
+                      children: [
+                        _ChatBubble(
+                          text: message["text"].toString(),
+                          isUser: isUser,
+                          isLoading: isLoadingMessage,
+                        ),
+                        if (!isUser && pendingAction != null)
+                          _PendingActionCard(
+                            action: pendingAction,
+                            canApply:
+                                _canApplyAction(pendingAction) && !actionApplied,
+                            isApplying: _isApplyingAction,
+                            alreadyApplied: actionApplied,
+                            onApply: () {
+                              _applyPendingAction(
+                                messageIndex: index,
+                                pendingAction: pendingAction,
+                              );
+                            },
+                          ),
+                      ],
                     );
                   }),
                 ],
@@ -372,13 +497,13 @@ class _AiCoachViewState extends State<AiCoachView> {
 
             return InkWell(
               borderRadius: BorderRadius.circular(22),
-              onTap: _isLoading
+              onTap: _isLoading || _isApplyingAction
                   ? null
                   : () {
                       _sendQuickAction(item["title"].toString());
                     },
               child: Opacity(
-                opacity: _isLoading ? 0.55 : 1,
+                opacity: _isLoading || _isApplyingAction ? 0.55 : 1,
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -459,19 +584,21 @@ class _AiCoachViewState extends State<AiCoachView> {
           Expanded(
             child: TextField(
               controller: _messageController,
-              enabled: !_isLoading,
+              enabled: !_isLoading && !_isApplyingAction,
               minLines: 1,
               maxLines: 4,
               textInputAction: TextInputAction.send,
               onSubmitted: (_) {
-                if (!_isLoading) {
+                if (!_isLoading && !_isApplyingAction) {
                   _sendMessage();
                 }
               },
               decoration: InputDecoration(
-                hintText: _isLoading
-                    ? "PulseAI está respondiendo..."
-                    : "Pregúntale algo a tu Coach IA...",
+                hintText: _isApplyingAction
+                    ? "Aplicando cambios..."
+                    : _isLoading
+                        ? "PulseAI está respondiendo..."
+                        : "Pregúntale algo a tu Coach IA...",
                 hintStyle: TextStyle(
                   color: TColor.gris,
                   fontSize: 13,
@@ -493,14 +620,14 @@ class _AiCoachViewState extends State<AiCoachView> {
           const SizedBox(width: 10),
           InkWell(
             borderRadius: BorderRadius.circular(18),
-            onTap: _isLoading ? null : _sendMessage,
+            onTap: _isLoading || _isApplyingAction ? null : _sendMessage,
             child: Container(
               width: 52,
               height: 52,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: _isLoading
+                  colors: _isLoading || _isApplyingAction
                       ? [
                           Colors.grey.shade400,
                           Colors.grey.shade500,
@@ -509,7 +636,7 @@ class _AiCoachViewState extends State<AiCoachView> {
                 ),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: _isLoading
+              child: _isLoading || _isApplyingAction
                   ? const SizedBox(
                       width: 21,
                       height: 21,
@@ -526,6 +653,169 @@ class _AiCoachViewState extends State<AiCoachView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PendingActionCard extends StatelessWidget {
+  final Map<String, dynamic> action;
+  final bool canApply;
+  final bool isApplying;
+  final bool alreadyApplied;
+  final VoidCallback onApply;
+
+  const _PendingActionCard({
+    required this.action,
+    required this.canApply,
+    required this.isApplying,
+    required this.alreadyApplied,
+    required this.onApply,
+  });
+
+  String _extractSummary() {
+    final type = action["type"]?.toString() ?? "";
+    final payload = action["payload"];
+
+    if (type == "add_workout_day" && payload is Map) {
+      final day = payload["day"];
+
+      if (day is Map) {
+        final dayName = day["name"]?.toString() ?? "Nuevo entrenamiento";
+        final duration = day["duration_minutes"]?.toString() ?? "-";
+        final exercises = day["exercises"];
+
+        final totalExercises = exercises is List ? exercises.length : 0;
+
+        return "$dayName · $duration min · $totalExercises ejercicio(s)";
+      }
+    }
+
+    return action["description"]?.toString() ?? "Acción propuesta por PulseAI";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = action["title"]?.toString() ?? "Propuesta de cambio";
+    final type = action["type"]?.toString() ?? "";
+    final isErrorType = type == "missing_exercises" || type == "not_enough_exercises";
+
+    Color cardColor;
+    Color iconColor;
+    IconData icon;
+
+    if (alreadyApplied) {
+      cardColor = Colors.green.withOpacity(0.08);
+      iconColor = Colors.green;
+      icon = Icons.check_circle_rounded;
+    } else if (isErrorType) {
+      cardColor = Colors.orange.withOpacity(0.10);
+      iconColor = Colors.orange;
+      icon = Icons.info_outline_rounded;
+    } else {
+      cardColor = TColor.rojo.withOpacity(0.08);
+      iconColor = TColor.rojo;
+      icon = Icons.auto_fix_high_rounded;
+    }
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(
+          left: 0,
+          right: 30,
+          bottom: 14,
+        ),
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: iconColor.withOpacity(0.16),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: TColor.blanco,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                icon,
+                color: iconColor,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    alreadyApplied ? "Cambios aplicados" : title,
+                    style: TextStyle(
+                      color: TColor.negro,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    alreadyApplied
+                        ? "Esta propuesta ya se ha añadido a tu rutina."
+                        : _extractSummary(),
+                    style: TextStyle(
+                      color: TColor.gris,
+                      fontSize: 12,
+                      height: 1.3,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (canApply && !alreadyApplied) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 42,
+                      child: ElevatedButton.icon(
+                        onPressed: isApplying ? null : onApply,
+                        icon: isApplying
+                            ? const SizedBox(
+                                width: 17,
+                                height: 17,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.check_rounded,
+                                size: 19,
+                              ),
+                        label: Text(
+                          isApplying ? "Aplicando..." : "Aplicar cambios",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: TColor.rojo,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
