@@ -1,4 +1,5 @@
-from typing import Any, Dict, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -29,3 +30,15 @@ class AiApplyActionResponse(BaseModel):
     message: str
     action_type: str
     data: Optional[Dict[str, Any]] = None
+
+
+class AiChatHistoryItem(BaseModel):
+    id: int
+    role: str
+    content: str
+    pending_action: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+
+class AiChatHistoryResponse(BaseModel):
+    messages: List[AiChatHistoryItem]

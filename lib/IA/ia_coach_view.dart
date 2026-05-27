@@ -17,14 +17,9 @@ class _AiCoachViewState extends State<AiCoachView> {
 
   bool _isLoading = false;
   bool _isApplyingAction = false;
+  bool _isLoadingHistory = true;
 
-  final List<Map<String, dynamic>> _messages = [
-    {
-      "isUser": false,
-      "text":
-          "Hola, soy tu Coach IA de PulseAI. Puedes preguntarme sobre entrenamiento, comida, sueño o hábitos saludables.",
-    },
-  ];
+  final List<Map<String, dynamic>> _messages = [];
 
   final List<Map<String, dynamic>> _quickActions = [
     {
@@ -50,6 +45,12 @@ class _AiCoachViewState extends State<AiCoachView> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _loadChatHistory();
+  }
+
+  @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
@@ -70,21 +71,87 @@ class _AiCoachViewState extends State<AiCoachView> {
     return null;
   }
 
+  Map<String, dynamic> _buildWelcomeMessage() {
+    return {
+      "isUser": false,
+      "text":
+          "Hola, soy tu Coach IA de PulseAI. Puedes preguntarme sobre entrenamiento, comida, sueño o hábitos saludables.",
+      "fromHistory": false,
+    };
+  }
+
+  Future<void> _loadChatHistory() async {
+    try {
+      final history = await AiChatService.getChatHistory(limit: 40);
+
+      final loadedMessages = history.map((item) {
+        final map = Map<String, dynamic>.from(item as Map);
+        final role = map["role"]?.toString() ?? "assistant";
+        final pendingAction = _safeMap(map["pending_action"]);
+
+        return {
+          "isUser": role == "user",
+          "text": map["content"]?.toString() ?? "",
+          "pendingAction": pendingAction,
+          "actionApplied": false,
+          "fromHistory": true,
+        };
+      }).where((message) {
+        final text = message["text"]?.toString().trim() ?? "";
+        return text.isNotEmpty;
+      }).toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        _messages.clear();
+
+        if (loadedMessages.isEmpty) {
+          _messages.add(_buildWelcomeMessage());
+        } else {
+          _messages.addAll(loadedMessages);
+        }
+
+        _isLoadingHistory = false;
+      });
+
+      _scrollToBottom();
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _messages.clear();
+        _messages.add(_buildWelcomeMessage());
+        _messages.add({
+          "isUser": false,
+          "text":
+              "No se ha podido cargar el historial anterior, pero puedes seguir usando el Coach IA.",
+          "fromHistory": false,
+        });
+        _isLoadingHistory = false;
+      });
+    }
+  }
+
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
 
-    if (text.isEmpty || _isLoading || _isApplyingAction) return;
+    if (text.isEmpty || _isLoading || _isApplyingAction || _isLoadingHistory) {
+      return;
+    }
 
     setState(() {
       _messages.add({
         "isUser": true,
         "text": text,
+        "fromHistory": false,
       });
 
       _messages.add({
         "isUser": false,
         "text": "Pensando...",
         "isLoading": true,
+        "fromHistory": false,
       });
 
       _isLoading = true;
@@ -111,6 +178,7 @@ class _AiCoachViewState extends State<AiCoachView> {
           "text": answer,
           "pendingAction": pendingAction,
           "actionApplied": false,
+          "fromHistory": false,
         };
 
         if (loadingIndex != -1) {
@@ -135,11 +203,13 @@ class _AiCoachViewState extends State<AiCoachView> {
           _messages[loadingIndex] = {
             "isUser": false,
             "text": errorMessage,
+            "fromHistory": false,
           };
         } else {
           _messages.add({
             "isUser": false,
             "text": errorMessage,
+            "fromHistory": false,
           });
         }
       });
@@ -158,7 +228,7 @@ class _AiCoachViewState extends State<AiCoachView> {
     required int messageIndex,
     required Map<String, dynamic> pendingAction,
   }) async {
-    if (_isApplyingAction || _isLoading) return;
+    if (_isApplyingAction || _isLoading || _isLoadingHistory) return;
 
     setState(() {
       _isApplyingAction = true;
@@ -184,6 +254,7 @@ class _AiCoachViewState extends State<AiCoachView> {
         _messages.add({
           "isUser": false,
           "text": message,
+          "fromHistory": false,
         });
       });
 
@@ -205,6 +276,7 @@ class _AiCoachViewState extends State<AiCoachView> {
         _messages.add({
           "isUser": false,
           "text": errorMessage,
+          "fromHistory": false,
         });
       });
 
@@ -227,7 +299,7 @@ class _AiCoachViewState extends State<AiCoachView> {
   }
 
   void _sendQuickAction(String action) {
-    if (_isLoading || _isApplyingAction) return;
+    if (_isLoading || _isApplyingAction || _isLoadingHistory) return;
 
     switch (action) {
       case "Crear rutina":
@@ -357,40 +429,52 @@ class _AiCoachViewState extends State<AiCoachView> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  ...List.generate(_messages.length, (index) {
-                    final message = _messages[index];
-                    final isLoadingMessage = message["isLoading"] == true;
-                    final isUser = message["isUser"] == true;
-                    final pendingAction = _safeMap(message["pendingAction"]);
-                    final actionApplied = message["actionApplied"] == true;
-
-                    return Column(
-                      crossAxisAlignment: isUser
-                          ? CrossAxisAlignment.end
-                          : CrossAxisAlignment.start,
-                      children: [
-                        _ChatBubble(
-                          text: message["text"].toString(),
-                          isUser: isUser,
-                          isLoading: isLoadingMessage,
+                  if (_isLoadingHistory)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: TColor.rojo,
                         ),
-                        if (!isUser && pendingAction != null)
-                          _PendingActionCard(
-                            action: pendingAction,
-                            canApply:
-                                _canApplyAction(pendingAction) && !actionApplied,
-                            isApplying: _isApplyingAction,
-                            alreadyApplied: actionApplied,
-                            onApply: () {
-                              _applyPendingAction(
-                                messageIndex: index,
-                                pendingAction: pendingAction,
-                              );
-                            },
+                      ),
+                    )
+                  else
+                    ...List.generate(_messages.length, (index) {
+                      final message = _messages[index];
+                      final isLoadingMessage = message["isLoading"] == true;
+                      final isUser = message["isUser"] == true;
+                      final pendingAction = _safeMap(message["pendingAction"]);
+                      final actionApplied = message["actionApplied"] == true;
+                      final fromHistory = message["fromHistory"] == true;
+
+                      return Column(
+                        crossAxisAlignment: isUser
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                        children: [
+                          _ChatBubble(
+                            text: message["text"].toString(),
+                            isUser: isUser,
+                            isLoading: isLoadingMessage,
                           ),
-                      ],
-                    );
-                  }),
+                          if (!isUser && pendingAction != null)
+                            _PendingActionCard(
+                              action: pendingAction,
+                              canApply: !fromHistory &&
+                                  _canApplyAction(pendingAction) &&
+                                  !actionApplied,
+                              isApplying: _isApplyingAction,
+                              alreadyApplied: actionApplied,
+                              onApply: () {
+                                _applyPendingAction(
+                                  messageIndex: index,
+                                  pendingAction: pendingAction,
+                                );
+                              },
+                            ),
+                        ],
+                      );
+                    }),
                 ],
               ),
             ),
@@ -501,13 +585,16 @@ class _AiCoachViewState extends State<AiCoachView> {
 
             return InkWell(
               borderRadius: BorderRadius.circular(22),
-              onTap: _isLoading || _isApplyingAction
+              onTap: _isLoading || _isApplyingAction || _isLoadingHistory
                   ? null
                   : () {
                       _sendQuickAction(item["title"].toString());
                     },
               child: Opacity(
-                opacity: _isLoading || _isApplyingAction ? 0.55 : 1,
+                opacity:
+                    _isLoading || _isApplyingAction || _isLoadingHistory
+                        ? 0.55
+                        : 1,
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -563,6 +650,7 @@ class _AiCoachViewState extends State<AiCoachView> {
 
   Widget _buildInputBar() {
     final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    final bool disabled = _isLoading || _isApplyingAction || _isLoadingHistory;
 
     return Container(
       margin: EdgeInsets.fromLTRB(
@@ -588,21 +676,23 @@ class _AiCoachViewState extends State<AiCoachView> {
           Expanded(
             child: TextField(
               controller: _messageController,
-              enabled: !_isLoading && !_isApplyingAction,
+              enabled: !disabled,
               minLines: 1,
               maxLines: 4,
               textInputAction: TextInputAction.send,
               onSubmitted: (_) {
-                if (!_isLoading && !_isApplyingAction) {
+                if (!disabled) {
                   _sendMessage();
                 }
               },
               decoration: InputDecoration(
-                hintText: _isApplyingAction
-                    ? "Aplicando cambios..."
-                    : _isLoading
-                        ? "PulseAI está respondiendo..."
-                        : "Pregúntale algo a tu Coach IA...",
+                hintText: _isLoadingHistory
+                    ? "Cargando historial..."
+                    : _isApplyingAction
+                        ? "Aplicando cambios..."
+                        : _isLoading
+                            ? "PulseAI está respondiendo..."
+                            : "Pregúntale algo a tu Coach IA...",
                 hintStyle: TextStyle(
                   color: TColor.gris,
                   fontSize: 13,
@@ -624,14 +714,14 @@ class _AiCoachViewState extends State<AiCoachView> {
           const SizedBox(width: 10),
           InkWell(
             borderRadius: BorderRadius.circular(18),
-            onTap: _isLoading || _isApplyingAction ? null : _sendMessage,
+            onTap: disabled ? null : _sendMessage,
             child: Container(
               width: 52,
               height: 52,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: _isLoading || _isApplyingAction
+                  colors: disabled
                       ? [
                           Colors.grey.shade400,
                           Colors.grey.shade500,
@@ -640,7 +730,7 @@ class _AiCoachViewState extends State<AiCoachView> {
                 ),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: _isLoading || _isApplyingAction
+              child: disabled
                   ? const SizedBox(
                       width: 21,
                       height: 21,

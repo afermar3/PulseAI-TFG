@@ -1,3 +1,5 @@
+from typing import Any, Dict, List, Optional
+
 from app.database.models import User, UserProfile
 
 
@@ -13,11 +15,48 @@ def _safe_value(value, fallback: str = "No especificado") -> str:
     return text
 
 
+def _format_recent_chat_history(
+    recent_messages: Optional[List[Dict[str, Any]]],
+) -> str:
+    if not recent_messages:
+        return """
+Historial reciente de conversación:
+- No hay mensajes anteriores relevantes.
+""".strip()
+
+    lines = ["Historial reciente de conversación:"]
+
+    for message in recent_messages[-10:]:
+        role = message.get("role")
+        content = str(message.get("content") or "").strip()
+
+        if not content:
+            continue
+
+        if role == "user":
+            label = "Usuario"
+        elif role == "assistant":
+            label = "Coach IA"
+        else:
+            label = "Mensaje"
+
+        if len(content) > 700:
+            content = content[:700].strip() + "..."
+
+        lines.append(f"{label}: {content}")
+
+    if len(lines) == 1:
+        lines.append("- No hay mensajes anteriores relevantes.")
+
+    return "\n".join(lines)
+
+
 def build_coach_prompt(
     user: User,
     profile: UserProfile | None,
     message: str,
     app_context: str | None = None,
+    recent_messages: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     if profile is None:
         user_name = "usuario"
@@ -45,6 +84,8 @@ Contexto real de PulseAI:
 - No se ha podido cargar contexto adicional de la app.
 """.strip()
 
+    recent_history_text = _format_recent_chat_history(recent_messages)
+
     return f"""
 Eres PulseAI Coach, un entrenador personal inteligente integrado en una app móvil de fitness, nutrición, sueño y seguimiento de entrenamientos.
 
@@ -56,11 +97,26 @@ No digas que no tienes edad, peso, altura, género u objetivo si aparecen en el 
 También tienes acceso a contexto real de la app: rutina activa, progreso semanal, racha, sesiones recientes y entrenamientos programados.
 Cuando el usuario pregunte por su progreso, rutina, entrenamientos recientes o qué debería hacer hoy, usa ese contexto real.
 
+Además, tienes acceso al historial reciente de conversación.
+Usa ese historial para entender referencias como:
+- "eso"
+- "ese entrenamiento"
+- "lo anterior"
+- "ponle"
+- "cámbialo"
+- "también"
+- "igual que antes"
+
+Si el historial no es suficiente para entender una referencia ambigua, pide aclaración.
+No inventes a qué se refiere el usuario si no está claro.
+
 {profile_text}
 
 {app_context_text}
 
-Mensaje del usuario:
+{recent_history_text}
+
+Mensaje actual del usuario:
 "{message}"
 
 REGLAS GENERALES:

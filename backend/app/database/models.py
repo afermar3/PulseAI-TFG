@@ -35,6 +35,12 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
+    ai_chat_messages = relationship(
+        "AiChatMessage",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
 
 class UserProfile(Base):
     __tablename__ = "user_profiles"
@@ -119,6 +125,7 @@ class Exercise(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
 class SavedWorkout(Base):
     __tablename__ = "saved_workouts"
 
@@ -142,6 +149,7 @@ class SavedWorkout(Base):
 
     user = relationship("User")
 
+
 class WorkoutSession(Base):
     __tablename__ = "workout_sessions"
 
@@ -162,6 +170,7 @@ class WorkoutSession(Base):
 
     user = relationship("User")
     saved_workout = relationship("SavedWorkout")
+
 
 class ScheduledWorkout(Base):
     __tablename__ = "scheduled_workouts"
@@ -186,6 +195,7 @@ class ScheduledWorkout(Base):
     user = relationship("User")
     saved_workout = relationship("SavedWorkout")
     completed_session = relationship("WorkoutSession")
+
 
 class WorkoutExerciseProgress(Base):
     __tablename__ = "workout_exercise_progress"
@@ -226,3 +236,20 @@ class WorkoutExerciseProgress(Base):
     saved_workout = relationship("SavedWorkout")
     scheduled_workout = relationship("ScheduledWorkout")
     exercise = relationship("Exercise")
+
+
+class AiChatMessage(Base):
+    __tablename__ = "ai_chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    role = Column(String, nullable=False)  # user / assistant
+    content = Column(Text, nullable=False)
+
+    pending_action_json = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="ai_chat_messages")

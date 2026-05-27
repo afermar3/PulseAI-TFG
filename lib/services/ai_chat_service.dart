@@ -99,4 +99,48 @@ class AiChatService {
       ),
     );
   }
+
+  static Future<List<dynamic>> getChatHistory({
+    int limit = 30,
+  }) async {
+    final token = await TokenStorage.getToken();
+
+    if (token == null) {
+      throw Exception("No hay sesión iniciada");
+    }
+
+    final url = Uri.parse(
+      "${ApiClient.baseUrl}/ai-chat/history",
+    ).replace(
+      queryParameters: {
+        "limit": limit.toString(),
+      },
+    );
+
+    final response = await http.get(
+      url,
+      headers: {
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      final messages = data["messages"];
+
+      if (messages is List) {
+        return messages;
+      }
+
+      return [];
+    }
+
+    throw Exception(
+      _extractErrorMessage(
+        data,
+        "No se ha podido cargar el historial del Coach IA",
+      ),
+    );
+  }
 }
