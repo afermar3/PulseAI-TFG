@@ -1126,15 +1126,17 @@ def _is_schedule_workout_request(message: str) -> bool:
 
     schedule_keywords = [
         "programa",
+        "programame",
         "agendar",
         "agenda",
         "planifica",
         "ponme",
+        "pon",
     ]
 
     date_keywords = [
-        "manana",
         "hoy",
+        "manana",
         "lunes",
         "martes",
         "miercoles",
@@ -1149,43 +1151,230 @@ def _is_schedule_workout_request(message: str) -> bool:
         "entreno",
         "sesion",
         "rutina",
+        "dia",
+        "pierna",
+        "pecho",
+        "espalda",
+        "hombro",
+        "brazos",
+        "core",
+        "abdominales",
     ]
 
     return (
         any(keyword in text for keyword in schedule_keywords)
-        and any(keyword in text for keyword in workout_keywords)
         and any(keyword in text for keyword in date_keywords)
+        and any(keyword in text for keyword in workout_keywords)
     )
 
 
+def _next_weekday_date(target_weekday: int) -> datetime:
+    today = datetime.utcnow()
+    days_ahead = target_weekday - today.weekday()
+
+    if days_ahead <= 0:
+        days_ahead += 7
+
+    return today + timedelta(days=days_ahead)
+
+
+def _extract_schedule_date(message: str) -> Optional[datetime]:
+    text = _normalize(message)
+    now = datetime.utcnow()
+
+    if "hoy" in text:
+        return now
+
+    if "manana" in text:
+        return now + timedelta(days=1)
+
+    weekdays = {
+        "lunes": 0,
+        "martes": 1,
+        "miercoles": 2,
+        "jueves": 3,
+        "viernes": 4,
+        "sabado": 5,
+        "domingo": 6,
+    }
+
+    for day_name, weekday in weekdays.items():
+        if day_name in text:
+            return _next_weekday_date(weekday)
+
+    return None
+
+
+def _day_matches_muscle_focus(
+    day: Dict[str, Any],
+    muscle_focus: Dict[str, Any],
+) -> bool:
+    searchable_text = _normalize(
+        " ".join(
+            [
+                str(day.get("name") or ""),
+                str(day.get("focus") or ""),
+            ]
+        )
+    )
+
+    keywords = []
+    keywords.extend(muscle_focus.get("keywords") or [])
+    keywords.extend(muscle_focus.get("exercise_keywords") or [])
+
+    return any(keyword in searchable_text for keyword in keywords)
+
+
+def _find_day_for_schedule(
+    content: Dict[str, Any],
+    message: str,
+) -> Optional[Dict[str, Any]]:
+    days = content.get("days")
+
+    if not isinstance(days, list) or not days:
+        return None
+
+    day_number = _extract_day_number(message)
+
+    if day_number is not None:
+        if day_number < 1 or day_number > len(days):
+            return None
+
+        day = days[day_number - 1]
+
+        if isinstance(day, dict):
+            return day
+
+        return None
+
+    muscle_focus = _detect_muscle_focus(message)
+
+    for raw_day in days:
+        if not isinstance(raw_day, dict):
+            continue
+
+        if _day_matches_muscle_focus(raw_day, muscle_focus):
+            return raw_day
+
+    return None
+
 def _build_schedule_workout_action(
+    db: Session,
     user: User,
     message: str,
 ) -> Dict[str, Any]:
-    text = _normalize(message)
+    active_workout = _get_active_workout(db=db, user=user)
 
-    scheduled_date_hint = None
+    if active_workout is None:
+        return {
+            "type": "create_workout_plan",
+            "title": "Crear una rutina antes de programar entrenamientos",
+            "description": "No tienes una rutina activa. Antes de programar entrenamientos, habría que crear o activar una rutina.",
+            "requires_confirmation": False,
+            "payload": {
+                "reason": "NO_ACTIVE_WORKOUT",
+                "original_message": message,
+            },
+        }
 
-    if "manana" in text:
-        scheduled_date_hint = (
-            datetime.utcnow() + timedelta(days=1)
-        ).date().isoformat()
-    elif "hoy" in text:
-        scheduled_date_hint = datetime.utcnow().date().isoformat()
+    scheduled_date = _extract_schedule_date(message)
 
-    muscle_focus = _detect_muscle_focus(message)
-    duration_minutes = _detect_duration_minutes(message)
+    if scheduled_date is None:
+        return {
+            "type": "missing_schedule_date",
+            "title": "Falta indicar la fecha",
+            "description": "He entendido que quieres programar un entrenamiento, pero necesito saber cuándo: hoy, mañana o un día de la semana.",
+            "requires_confirmation": False,
+            "payload": {
+                "saved_workout_id": active_workout.id,
+                "workout_title": active_workout.title,
+                "original_message": message,
+            },
+        }
+
+    content = _parse_content_json(active_workout.content_json)
+    days = content.get("days")
+
+    if not isinstance(days, list) or not days:
+        return {
+            "type": "invalid_workout_days",
+            "title": "Rutina sin días válidos",
+            "description": "Tu rutina activa no contiene días válidos para programar.",
+            "requires_confirmation": False,
+            "payload": {
+                "saved_workout_id": active_workout.id,
+                "workout_title": active_workout.title,
+                "original_message": message,
+            },
+        }
+
+    day = _find_day_for_schedule(
+        content=content,
+        message=message,
+    )
+
+    if day is None:
+        day_number = _extract_day_number(message)
+
+        if day_number is not None:
+            return {
+                "type": "invalid_day",
+                "title": "Día no encontrado",
+                "description": f"No he encontrado el día {day_number} en tu rutina activa.",
+                "requires_confirmation": False,
+                "payload": {
+                    "saved_workout_id": active_workout.id,
+                    "workout_title": active_workout.title,
+                    "day_number": day_number,
+                    "available_days": len(days),
+                    "original_message": message,
+                },
+            }
+
+        return {
+            "type": "missing_day",
+            "title": "No he encontrado qué día programar",
+            "description": "No he podido identificar qué día de tu rutina quieres programar. Prueba con: “Programa el día 2 para mañana”.",
+            "requires_confirmation": False,
+            "payload": {
+                "saved_workout_id": active_workout.id,
+                "workout_title": active_workout.title,
+                "available_days": len(days),
+                "original_message": message,
+            },
+        }
+
+    raw_day_number = day.get("day_number")
+    day_index = days.index(day)
+
+    try:
+        day_number = int(raw_day_number)
+    except Exception:
+        day_number = day_index + 1
+
+    day_name = day.get("name") or f"Día {day_number}"
+    duration_minutes = (
+        day.get("duration_minutes")
+        or active_workout.duration_minutes
+        or content.get("duration_minutes")
+    )
 
     return {
         "type": "schedule_workout",
-        "title": "Programar entrenamiento",
-        "description": "Se preparará un entrenamiento para añadirlo a tu agenda.",
+        "title": f"Programar {day_name}",
+        "description": (
+            f"Se programará {day_name} de tu rutina activa "
+            f"para el {scheduled_date.date().isoformat()}."
+        ),
         "requires_confirmation": True,
         "payload": {
-            "workout_title": f"Entrenamiento de {muscle_focus['label'].lower()}",
-            "day_name": muscle_focus["label"],
+            "target": "active_workout",
+            "saved_workout_id": active_workout.id,
+            "workout_title": active_workout.title,
+            "day_number": day_number,
+            "day_name": day_name,
+            "scheduled_date": scheduled_date.isoformat(),
             "duration_minutes": duration_minutes,
-            "scheduled_date_hint": scheduled_date_hint,
             "original_message": message,
         },
     }
@@ -1337,6 +1526,26 @@ def _build_replace_exercise_action(
         },
     }
 
+def _format_schedule_date_for_answer(raw_date: Any) -> str:
+    if not raw_date:
+        return "Fecha pendiente"
+
+    try:
+        date = datetime.fromisoformat(str(raw_date))
+        today = datetime.utcnow().date()
+        tomorrow = today + timedelta(days=1)
+
+        formatted = date.strftime("%d/%m/%Y")
+
+        if date.date() == today:
+            return f"Hoy · {formatted}"
+
+        if date.date() == tomorrow:
+            return f"Mañana · {formatted}"
+
+        return formatted
+    except Exception:
+        return str(raw_date)
 
 def build_pending_action_answer(
     pending_action: Dict[str, Any],
@@ -1533,19 +1742,28 @@ def build_pending_action_answer(
         )
 
     if action_type == "schedule_workout":
-        workout_title = payload.get("workout_title", "Entrenamiento")
-        duration_minutes = payload.get("duration_minutes", "No especificada")
-        scheduled_date_hint = payload.get("scheduled_date_hint") or "fecha pendiente de confirmar"
-
-        return (
-            "He preparado una propuesta para programar un entrenamiento.\n\n"
-            "Propuesta:\n"
-            f"- Entrenamiento: {workout_title}\n"
-            f"- Duración estimada: {duration_minutes} minutos\n"
-            f"- Fecha: {scheduled_date_hint}\n\n"
-            "No lo he añadido todavía a tu agenda.\n\n"
-            "¿Quieres que lo programe?"
+        workout_title = payload.get("workout_title", "tu rutina activa")
+        day_number = payload.get("day_number", "No especificado")
+        day_name = payload.get("day_name", "Entrenamiento")
+        scheduled_date = _format_schedule_date_for_answer(
+            payload.get("scheduled_date")
         )
+        duration_minutes = payload.get("duration_minutes", "No especificada")
+
+        return "\n".join([
+            "He preparado una propuesta para programar un entrenamiento.",
+            "",
+            "Propuesta:",
+            f"- Rutina: {workout_title}",
+            f"- Día: {day_number} - {day_name}",
+            f"- Fecha: {scheduled_date}",
+            f"- Duración estimada: {duration_minutes} minutos",
+            "",
+            "Importante:",
+            "- No lo he añadido todavía a tu agenda.",
+            "",
+            "¿Quieres que lo programe?",
+        ])
 
     return (
         f"{title}\n\n"
@@ -1582,6 +1800,7 @@ def detect_pending_action(
 
     if _is_schedule_workout_request(message):
         return _build_schedule_workout_action(
+            db=db,
             user=user,
             message=message,
         )

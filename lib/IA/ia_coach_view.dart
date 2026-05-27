@@ -190,7 +190,7 @@ class _AiCoachViewState extends State<AiCoachView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: success ? TColor.rojo : Colors.orange,
+          backgroundColor: success ? Colors.green : Colors.orange,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -282,17 +282,18 @@ class _AiCoachViewState extends State<AiCoachView> {
     });
   }
 
-bool _canApplyAction(Map<String, dynamic> action) {
-  final type = action["type"]?.toString();
-  final requiresConfirmation = action["requires_confirmation"] == true;
+  bool _canApplyAction(Map<String, dynamic> action) {
+    final type = action["type"]?.toString();
+    final requiresConfirmation = action["requires_confirmation"] == true;
 
-  if (!requiresConfirmation) return false;
+    if (!requiresConfirmation) return false;
 
-  return type == "add_workout_day" ||
-      type == "add_exercise_to_day" ||
-      type == "replace_exercise" ||
-      type == "update_exercise_config";
-}
+    return type == "add_workout_day" ||
+        type == "add_exercise_to_day" ||
+        type == "replace_exercise" ||
+        type == "update_exercise_config" ||
+        type == "schedule_workout";
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -676,6 +677,57 @@ class _PendingActionCard extends StatelessWidget {
     required this.onApply,
   });
 
+  String _formatActionDate(String? rawDate) {
+    if (rawDate == null || rawDate.trim().isEmpty) {
+      return "Fecha pendiente";
+    }
+
+    try {
+      final date = DateTime.parse(rawDate);
+      final now = DateTime.now();
+
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+      final actionDay = DateTime(date.year, date.month, date.day);
+
+      final day = date.day.toString().padLeft(2, "0");
+      final month = date.month.toString().padLeft(2, "0");
+      final year = date.year.toString();
+
+      if (actionDay == today) {
+        return "Hoy · $day/$month/$year";
+      }
+
+      if (actionDay == tomorrow) {
+        return "Mañana · $day/$month/$year";
+      }
+
+      return "$day/$month/$year";
+    } catch (_) {
+      return rawDate;
+    }
+  }
+
+  String _appliedTitle() {
+    final type = action["type"]?.toString();
+
+    if (type == "schedule_workout") {
+      return "Entrenamiento programado";
+    }
+
+    return "Cambios aplicados";
+  }
+
+  String _appliedSubtitle() {
+    final type = action["type"]?.toString();
+
+    if (type == "schedule_workout") {
+      return "Esta propuesta ya se ha añadido a tu agenda.";
+    }
+
+    return "Esta propuesta ya se ha añadido a tu rutina.";
+  }
+
   String _extractSummary() {
     final type = action["type"]?.toString() ?? "";
     final payload = action["payload"];
@@ -694,8 +746,26 @@ class _PendingActionCard extends StatelessWidget {
       }
     }
 
+    if (type == "add_exercise_to_day" && payload is Map) {
+      final dayNumber = payload["day_number"]?.toString() ?? "-";
+      final dayName = payload["day_name"]?.toString() ?? "Día $dayNumber";
+      final exercise = payload["exercise"];
+
+      if (exercise is Map) {
+        final exerciseName =
+            exercise["exercise_name"]?.toString() ?? "Ejercicio";
+        final sets = exercise["sets"]?.toString() ?? "3";
+        final reps = exercise["reps"]?.toString() ?? "10-12";
+
+        return "$exerciseName · Día $dayNumber - $dayName · $sets series x $reps";
+      }
+
+      return "Añadir ejercicio al día $dayNumber";
+    }
+
     if (type == "replace_exercise" && payload is Map) {
-      final oldExercise = payload["old_exercise"]?.toString() ?? "Ejercicio actual";
+      final oldExercise =
+          payload["old_exercise"]?.toString() ?? "Ejercicio actual";
       final newExercise = payload["new_exercise"];
 
       if (newExercise is Map) {
@@ -707,41 +777,61 @@ class _PendingActionCard extends StatelessWidget {
 
       return action["description"]?.toString() ?? "Sustituir ejercicio";
     }
+
     if (type == "update_exercise_config" && payload is Map) {
-  final dayNumber = payload["day_number"]?.toString() ?? "-";
-  final dayName = payload["day_name"]?.toString() ?? "Día $dayNumber";
-  final exerciseName = payload["exercise_name"]?.toString() ?? "Ejercicio";
-  final updates = payload["updates"];
+      final dayNumber = payload["day_number"]?.toString() ?? "-";
+      final dayName = payload["day_name"]?.toString() ?? "Día $dayNumber";
+      final exerciseName = payload["exercise_name"]?.toString() ?? "Ejercicio";
+      final updates = payload["updates"];
 
-  final parts = <String>[];
+      final parts = <String>[];
 
-  if (updates is Map) {
-    if (updates["sets"] != null) {
-      parts.add("${updates["sets"]} series");
-    }
+      if (updates is Map) {
+        if (updates["sets"] != null) {
+          parts.add("${updates["sets"]} series");
+        }
 
-    if (updates["reps"] != null) {
-      parts.add("${updates["reps"]} reps");
-    }
+        if (updates["reps"] != null) {
+          parts.add("${updates["reps"]} reps");
+        }
 
-    if (updates["rest_seconds"] != null) {
-      parts.add("${updates["rest_seconds"]} s descanso");
-    }
-  }
-
-  final updateText = parts.isEmpty ? "Actualizar configuración" : parts.join(" · ");
-
-  return "$exerciseName · Día $dayNumber - $dayName · $updateText";
-}
-
-        return action["description"]?.toString() ?? "Acción propuesta por PulseAI";
+        if (updates["rest_seconds"] != null) {
+          parts.add("${updates["rest_seconds"]} s descanso");
+        }
       }
+
+      final updateText =
+          parts.isEmpty ? "Actualizar configuración" : parts.join(" · ");
+
+      return "$exerciseName · Día $dayNumber - $dayName · $updateText";
+    }
+
+    if (type == "schedule_workout" && payload is Map) {
+      final dayNumber = payload["day_number"]?.toString() ?? "-";
+      final dayName = payload["day_name"]?.toString() ?? "Entrenamiento";
+      final scheduledDate = _formatActionDate(
+        payload["scheduled_date"]?.toString(),
+      );
+      final duration = payload["duration_minutes"]?.toString() ?? "-";
+
+      return "Día $dayNumber - $dayName · $scheduledDate · $duration min";
+    }
+
+    return action["description"]?.toString() ?? "Acción propuesta por PulseAI";
+  }
 
   @override
   Widget build(BuildContext context) {
     final title = action["title"]?.toString() ?? "Propuesta de cambio";
     final type = action["type"]?.toString() ?? "";
-    final isErrorType = type == "missing_exercises" || type == "not_enough_exercises";
+    final isErrorType = type == "missing_exercises" ||
+        type == "not_enough_exercises" ||
+        type == "missing_day" ||
+        type == "invalid_day" ||
+        type == "missing_exercise" ||
+        type == "missing_update_values" ||
+        type == "missing_schedule_date" ||
+        type == "invalid_workout_days";
 
     Color cardColor;
     Color iconColor;
@@ -755,6 +845,10 @@ class _PendingActionCard extends StatelessWidget {
       cardColor = Colors.orange.withOpacity(0.10);
       iconColor = Colors.orange;
       icon = Icons.info_outline_rounded;
+    } else if (type == "schedule_workout") {
+      cardColor = TColor.primerColor1.withOpacity(0.08);
+      iconColor = TColor.primerColor1;
+      icon = Icons.event_available_rounded;
     } else {
       cardColor = TColor.rojo.withOpacity(0.08);
       iconColor = TColor.rojo;
@@ -799,7 +893,7 @@ class _PendingActionCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    alreadyApplied ? "Cambios aplicados" : title,
+                    alreadyApplied ? _appliedTitle() : title,
                     style: TextStyle(
                       color: TColor.negro,
                       fontSize: 14,
@@ -808,9 +902,7 @@ class _PendingActionCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    alreadyApplied
-                        ? "Esta propuesta ya se ha añadido a tu rutina."
-                        : _extractSummary(),
+                    alreadyApplied ? _appliedSubtitle() : _extractSummary(),
                     style: TextStyle(
                       color: TColor.gris,
                       fontSize: 12,
@@ -844,7 +936,9 @@ class _PendingActionCard extends StatelessWidget {
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: TColor.rojo,
+                          backgroundColor: type == "schedule_workout"
+                              ? TColor.primerColor1
+                              : TColor.rojo,
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(

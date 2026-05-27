@@ -1,11 +1,12 @@
 import json
 import unicodedata
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.database.models import Exercise, SavedWorkout, User
+from app.database.models import Exercise, SavedWorkout, ScheduledWorkout, User
 
 
 def _normalize(text: str) -> str:
@@ -962,6 +963,127 @@ def _apply_replace_exercise(
     }
 
 
+def _apply_schedule_workout(
+    db: Session,
+    user: User,
+    pending_action: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = pending_action.get("payload") or {}
+
+    saved_workout_id = payload.get("saved_workout_id")
+    workout_title = payload.get("workout_title")
+    day_number = payload.get("day_number")
+    day_name = payload.get("day_name")
+    scheduled_date_raw = payload.get("scheduled_date")
+    duration_minutes = payload.get("duration_minutes")
+
+    if saved_workout_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene saved_workout_id",
+        )
+
+    if not workout_title:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene workout_title",
+        )
+
+    if scheduled_date_raw is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene scheduled_date",
+        )
+
+    try:
+        scheduled_date = datetime.fromisoformat(str(scheduled_date_raw))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La fecha programada no es válida",
+        )
+
+    workout = _get_user_workout(
+        db=db,
+        user=user,
+        saved_workout_id=int(saved_workout_id),
+    )
+
+    parsed_day_number = None
+
+    if day_number is not None:
+        try:
+            parsed_day_number = int(day_number)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El número de día no es válido",
+            )
+
+    parsed_duration = None
+
+    if duration_minutes is not None:
+        try:
+            parsed_duration = int(duration_minutes)
+        except Exception:
+            parsed_duration = None
+
+    existing = (
+        db.query(ScheduledWorkout)
+        .filter(
+            ScheduledWorkout.user_id == user.id,
+            ScheduledWorkout.saved_workout_id == workout.id,
+            ScheduledWorkout.day_number == parsed_day_number,
+            ScheduledWorkout.completed == False,
+        )
+        .all()
+    )
+
+    for item in existing:
+        if (
+            item.scheduled_date.year == scheduled_date.year
+            and item.scheduled_date.month == scheduled_date.month
+            and item.scheduled_date.day == scheduled_date.day
+        ):
+            return {
+                "success": False,
+                "already_exists": True,
+                "scheduled_workout_id": item.id,
+                "saved_workout_id": workout.id,
+                "workout_title": item.workout_title,
+                "day_number": item.day_number,
+                "day_name": item.day_name,
+                "scheduled_date": item.scheduled_date.isoformat(),
+                "duration_minutes": item.duration_minutes,
+            }
+
+    scheduled_workout = ScheduledWorkout(
+        user_id=user.id,
+        saved_workout_id=workout.id,
+        workout_title=workout_title,
+        day_number=parsed_day_number,
+        day_name=day_name,
+        scheduled_date=scheduled_date,
+        duration_minutes=parsed_duration,
+        completed=False,
+    )
+
+    db.add(scheduled_workout)
+    db.commit()
+    db.refresh(scheduled_workout)
+
+    return {
+        "success": True,
+        "already_exists": False,
+        "scheduled_workout_id": scheduled_workout.id,
+        "saved_workout_id": workout.id,
+        "workout_title": scheduled_workout.workout_title,
+        "day_number": scheduled_workout.day_number,
+        "day_name": scheduled_workout.day_name,
+        "scheduled_date": scheduled_workout.scheduled_date.isoformat(),
+        "duration_minutes": scheduled_workout.duration_minutes,
+    }
+
 def apply_pending_action(
     db: Session,
     user: User,
@@ -1106,6 +1228,29 @@ def apply_pending_action(
             "action_type": action_type,
             "data": data,
         }
+    
+    if action_type == "schedule_workout":
+        data = _apply_schedule_workout(
+            db=db,
+            user=user,
+            pending_action=pending_action,
+        )
+
+        if data.get("already_exists") is True:
+            return {
+                "success": False,
+                "message": "Ese entrenamiento ya estaba programado para ese día. No se ha duplicado.",
+                "action_type": action_type,
+                "data": data,
+            }
+
+        return {
+            "success": True,
+            "message": "El entrenamiento se ha programado correctamente en tu agenda.",
+            "action_type": action_type,
+            "data": data,
+        }
+    
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
