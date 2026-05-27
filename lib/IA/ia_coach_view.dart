@@ -360,7 +360,8 @@ class _AiCoachViewState extends State<AiCoachView> {
 
     if (!requiresConfirmation) return false;
 
-    return type == "add_workout_day" ||
+    return type == "create_workout_plan" ||
+        type == "add_workout_day" ||
         type == "add_exercise_to_day" ||
         type == "replace_exercise" ||
         type == "update_exercise_config" ||
@@ -822,6 +823,34 @@ class _PendingActionCard extends StatelessWidget {
     final type = action["type"]?.toString() ?? "";
     final payload = action["payload"];
 
+    if (type == "create_workout_plan" && payload is Map) {
+      final workout = payload["workout"];
+      final activate = payload["activate"] == true;
+
+      if (workout is Map) {
+        final title = workout["title"]?.toString() ?? "Rutina IA";
+        final daysPerWeek = workout["days_per_week"]?.toString() ?? "-";
+        final duration = workout["duration_minutes"]?.toString() ?? "-";
+        final days = workout["days"];
+
+        int totalExercises = 0;
+
+        if (days is List) {
+          for (final day in days) {
+            if (day is Map && day["exercises"] is List) {
+              totalExercises += (day["exercises"] as List).length;
+            }
+          }
+        }
+
+        final activeText = activate ? "Se activará" : "Solo se guardará";
+
+        return "$title · $daysPerWeek días · $duration min · $totalExercises ejercicios · $activeText";
+      }
+
+      return "Crear nueva rutina";
+    }
+
     if (type == "add_workout_day" && payload is Map) {
       final day = payload["day"];
 
@@ -939,6 +968,10 @@ class _PendingActionCard extends StatelessWidget {
       cardColor = TColor.primerColor1.withOpacity(0.08);
       iconColor = TColor.primerColor1;
       icon = Icons.event_available_rounded;
+    } else if (type == "create_workout_plan") {
+      cardColor = Colors.green.withOpacity(0.08);
+      iconColor = Colors.green;
+      icon = Icons.fitness_center_rounded;
     } else {
       cardColor = TColor.rojo.withOpacity(0.08);
       iconColor = TColor.rojo;

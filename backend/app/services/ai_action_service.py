@@ -317,6 +317,406 @@ def _build_exercises_payload(
     ]
 
 
+def _is_create_workout_plan_request(message: str) -> bool:
+    text = _normalize(message)
+
+    create_keywords = [
+        "hazme",
+        "creame",
+        "crea",
+        "generame",
+        "genera",
+        "preparame",
+        "prepara",
+        "montame",
+        "monta",
+    ]
+
+    plan_keywords = [
+        "rutina",
+        "plan",
+        "planning",
+        "semana",
+        "semanal",
+    ]
+
+    has_create = any(keyword in text for keyword in create_keywords)
+    has_plan = any(keyword in text for keyword in plan_keywords)
+
+    return has_create and has_plan
+
+
+def _extract_days_per_week(message: str) -> int:
+    text = _normalize(message)
+
+    numeric_patterns = [
+        r"(\d+)\s*dias",
+        r"(\d+)\s*dia",
+        r"entrenar\s*(\d+)",
+    ]
+
+    for pattern in numeric_patterns:
+        match = re.search(pattern, text)
+
+        if match:
+            try:
+                value = int(match.group(1))
+
+                if 1 <= value <= 6:
+                    return value
+            except Exception:
+                pass
+
+    word_patterns = [
+        ("un dia", 1),
+        ("uno dia", 1),
+        ("dos dias", 2),
+        ("tres dias", 3),
+        ("cuatro dias", 4),
+        ("cinco dias", 5),
+        ("seis dias", 6),
+    ]
+
+    for pattern, value in word_patterns:
+        if pattern in text:
+            return value
+
+    return 4
+
+
+def _detect_workout_goal(message: str, user: User) -> str:
+    text = _normalize(message)
+
+    if "perder grasa" in text or "perdida de grasa" in text or "adelgazar" in text:
+        return "Perder grasa"
+
+    if "resistencia" in text or "cardio" in text:
+        return "Mejorar resistencia"
+
+    if "mantener" in text or "mantenimiento" in text:
+        return "Mantener forma"
+
+    if "ganar musculo" in text or "hipertrofia" in text or "musculo" in text:
+        return "Ganar músculo"
+
+    profile = getattr(user, "profile", None)
+
+    if profile is not None and getattr(profile, "goal", None):
+        return str(profile.goal)
+
+    return "Ganar músculo"
+
+
+def _detect_workout_level(message: str) -> str:
+    text = _normalize(message)
+
+    if "principiante" in text:
+        return "Principiante"
+
+    if "avanzado" in text:
+        return "Avanzado"
+
+    if "intermedio" in text:
+        return "Intermedio"
+
+    return "Principiante/Intermedio"
+
+
+def _get_focuses_for_days(days_per_week: int) -> List[Dict[str, Any]]:
+    if days_per_week <= 1:
+        return [
+            {
+                "name": "Full body",
+                "focus": "Entrenamiento general de cuerpo completo",
+                "muscles": ["pecho", "pierna", "core", "espalda"],
+            }
+        ]
+
+    if days_per_week == 2:
+        return [
+            {
+                "name": "Tren superior",
+                "focus": "Pecho, espalda, hombro y brazos",
+                "muscles": ["pecho", "espalda", "hombro", "brazo"],
+            },
+            {
+                "name": "Tren inferior y core",
+                "focus": "Pierna, glúteos y abdomen",
+                "muscles": ["pierna", "core"],
+            },
+        ]
+
+    if days_per_week == 3:
+        return [
+            {
+                "name": "Empuje",
+                "focus": "Pecho, hombro y tríceps",
+                "muscles": ["pecho", "hombro", "brazo"],
+            },
+            {
+                "name": "Pierna y core",
+                "focus": "Pierna, glúteos y abdomen",
+                "muscles": ["pierna", "core"],
+            },
+            {
+                "name": "Tracción y core",
+                "focus": "Espalda, bíceps y abdomen",
+                "muscles": ["espalda", "brazo", "core"],
+            },
+        ]
+
+    if days_per_week == 4:
+        return [
+            {
+                "name": "Tren superior A",
+                "focus": "Pecho, hombro y tríceps",
+                "muscles": ["pecho", "hombro", "brazo"],
+            },
+            {
+                "name": "Tren inferior A",
+                "focus": "Pierna y glúteos",
+                "muscles": ["pierna"],
+            },
+            {
+                "name": "Tren superior B",
+                "focus": "Espalda, bíceps y core",
+                "muscles": ["espalda", "brazo", "core"],
+            },
+            {
+                "name": "Tren inferior B",
+                "focus": "Pierna y abdomen",
+                "muscles": ["pierna", "core"],
+            },
+        ]
+
+    return [
+        {
+            "name": "Pecho y tríceps",
+            "focus": "Pecho y tríceps",
+            "muscles": ["pecho", "brazo"],
+        },
+        {
+            "name": "Pierna",
+            "focus": "Pierna y glúteos",
+            "muscles": ["pierna"],
+        },
+        {
+            "name": "Espalda y bíceps",
+            "focus": "Espalda y bíceps",
+            "muscles": ["espalda", "brazo"],
+        },
+        {
+            "name": "Core y movilidad",
+            "focus": "Abdomen y estabilidad",
+            "muscles": ["core"],
+        },
+        {
+            "name": "Full body",
+            "focus": "Cuerpo completo",
+            "muscles": ["pecho", "pierna", "espalda", "core"],
+        },
+    ][:days_per_week]
+
+
+def _get_muscle_focus_by_key(key: str) -> Dict[str, Any]:
+    dummy_message_by_key = {
+        "pecho": "pecho",
+        "espalda": "espalda",
+        "pierna": "pierna",
+        "hombro": "hombro",
+        "brazo": "brazos",
+        "core": "abdominales",
+        "general": "general",
+    }
+
+    return _detect_muscle_focus(dummy_message_by_key.get(key, "general"))
+
+
+def _get_fallback_exercises(
+    db: Session,
+    limit: int,
+    excluded_ids: Optional[set[int]] = None,
+) -> List[Exercise]:
+    excluded_ids = excluded_ids or set()
+
+    all_exercises = db.query(Exercise).order_by(Exercise.id.asc()).all()
+
+    return [
+        exercise
+        for exercise in all_exercises
+        if exercise.id not in excluded_ids
+    ][:limit]
+
+
+def _build_day_exercises_for_plan(
+    db: Session,
+    muscle_keys: List[str],
+    duration_minutes: int,
+    used_ids_global: set[int],
+) -> List[Dict[str, Any]]:
+    target_count = 3 if duration_minutes <= 35 else 4
+
+    selected: List[Exercise] = []
+    selected_ids: set[int] = set()
+
+    for muscle_key in muscle_keys:
+        muscle_focus = _get_muscle_focus_by_key(muscle_key)
+
+        matches = _find_matching_exercises(
+            db=db,
+            muscle_focus=muscle_focus,
+            limit=target_count,
+        )
+
+        for exercise in matches:
+            if exercise.id in selected_ids:
+                continue
+
+            selected.append(exercise)
+            selected_ids.add(exercise.id)
+
+            if len(selected) >= target_count:
+                break
+
+        if len(selected) >= target_count:
+            break
+
+    if len(selected) < target_count:
+        fallback = _get_fallback_exercises(
+            db=db,
+            limit=target_count - len(selected),
+            excluded_ids=selected_ids,
+        )
+
+        for exercise in fallback:
+            selected.append(exercise)
+            selected_ids.add(exercise.id)
+
+            if len(selected) >= target_count:
+                break
+
+    return [
+        {
+            "exercise_id": exercise.id,
+            "exercise_name": exercise.name,
+            "sets": 3,
+            "reps": "10-12",
+            "rest_seconds": 60 if duration_minutes <= 35 else 75,
+            "notes": "",
+        }
+        for exercise in selected[:target_count]
+    ]
+
+
+def _build_workout_plan_days(
+    db: Session,
+    days_per_week: int,
+    duration_minutes: int,
+) -> List[Dict[str, Any]]:
+    focuses = _get_focuses_for_days(days_per_week)
+    days: List[Dict[str, Any]] = []
+    used_ids_global: set[int] = set()
+
+    for index, focus in enumerate(focuses, start=1):
+        exercises = _build_day_exercises_for_plan(
+            db=db,
+            muscle_keys=focus["muscles"],
+            duration_minutes=duration_minutes,
+            used_ids_global=used_ids_global,
+        )
+
+        for exercise in exercises:
+            exercise_id = exercise.get("exercise_id")
+
+            if exercise_id is not None:
+                try:
+                    used_ids_global.add(int(exercise_id))
+                except Exception:
+                    pass
+
+        if not exercises:
+            continue
+
+        days.append(
+            {
+                "day_number": index,
+                "name": focus["name"],
+                "focus": focus["focus"],
+                "duration_minutes": duration_minutes,
+                "exercises": exercises,
+            }
+        )
+
+    return days
+
+
+def _build_create_workout_plan_action(
+    db: Session,
+    user: User,
+    message: str,
+) -> Dict[str, Any]:
+    days_per_week = _extract_days_per_week(message)
+    duration_minutes = _detect_duration_minutes(message)
+    goal = _detect_workout_goal(message, user)
+    level = _detect_workout_level(message)
+
+    days = _build_workout_plan_days(
+        db=db,
+        days_per_week=days_per_week,
+        duration_minutes=duration_minutes,
+    )
+
+    if not days:
+        return {
+            "type": "missing_exercises",
+            "title": "No hay ejercicios suficientes",
+            "description": (
+                "No he podido preparar una rutina porque no hay ejercicios "
+                "disponibles en tu biblioteca."
+            ),
+            "requires_confirmation": False,
+            "payload": {
+                "original_message": message,
+            },
+        }
+
+    real_days_per_week = len(days)
+    total_exercises = sum(len(day.get("exercises", [])) for day in days)
+
+    duration_label = "corta" if duration_minutes <= 35 else "completa"
+    title = f"Rutina IA {duration_label} {real_days_per_week} días"
+
+    workout = {
+        "title": title,
+        "summary": (
+            f"Rutina generada por Coach IA con {real_days_per_week} días "
+            f"y {total_exercises} ejercicios reales de tu biblioteca."
+        ),
+        "goal": goal,
+        "level": level,
+        "days_per_week": real_days_per_week,
+        "duration_minutes": duration_minutes,
+        "source": "AI_ACTION",
+        "days": days,
+    }
+
+    return {
+        "type": "create_workout_plan",
+        "title": f"Crear {title}",
+        "description": (
+            f"Se guardará una rutina de {real_days_per_week} días, "
+            f"{duration_label}, usando ejercicios reales de tu biblioteca."
+        ),
+        "requires_confirmation": True,
+        "payload": {
+            "target": "saved_workouts",
+            "activate": _should_activate_created_workout(message),
+            "workout": workout,
+            "original_message": message,
+        },
+    }
+
+
 def _extract_day_number(message: str) -> Optional[int]:
     text = _normalize(message)
 
@@ -974,6 +1374,28 @@ def _find_exercise_in_day_by_message(
 
     return best_match
 
+def _should_activate_created_workout(message: str) -> bool:
+    text = _normalize(message)
+
+    force_activate_keywords = [
+        "ponla como activa",
+        "ponerla como activa",
+        "ponla activa",
+        "activala",
+        "actívala",
+        "activar rutina",
+        "rutina activa",
+        "como rutina activa",
+        "que sea mi rutina activa",
+        "sustituye mi rutina actual",
+        "reemplaza mi rutina actual",
+        "usar desde ya",
+        "usarla desde ya",
+        "empezar con ella",
+        "empezarla ya",
+    ]
+
+    return any(keyword in text for keyword in force_activate_keywords)
 
 def _build_update_exercise_config_action(
     db: Session,
@@ -1555,6 +1977,90 @@ def build_pending_action_answer(
     description = pending_action.get("description", "")
     payload = pending_action.get("payload", {})
 
+    if action_type == "create_workout_plan":
+        workout = payload.get("workout", {})
+        workout_title = workout.get("title", "Rutina IA")
+        goal = workout.get("goal", "No especificado")
+        level = workout.get("level", "No especificado")
+        days = workout.get("days", [])
+        days_per_week = workout.get("days_per_week", len(days))
+        duration_minutes = workout.get("duration_minutes", "No especificada")
+        activate = payload.get("activate") is True
+
+        total_exercises = 0
+
+        if isinstance(days, list):
+            total_exercises = sum(
+                len(day.get("exercises", []))
+                for day in days
+                if isinstance(day, dict)
+            )
+
+        lines = [
+            "He preparado una rutina completa para ti.",
+            "",
+            "Propuesta:",
+            f"- Nombre: {workout_title}",
+            f"- Objetivo: {goal}",
+            f"- Nivel: {level}",
+            f"- Días por semana: {days_per_week}",
+            f"- Duración estimada por sesión: {duration_minutes} minutos",
+            f"- Ejercicios reales usados: {total_exercises}",
+            "",
+            "Distribución:",
+        ]
+
+        if isinstance(days, list):
+            for day in days:
+                if not isinstance(day, dict):
+                    continue
+
+                day_number = day.get("day_number", "-")
+                day_name = day.get("name", "Día")
+                focus = day.get("focus", "Entrenamiento")
+                exercises = day.get("exercises", [])
+
+                lines.append("")
+                lines.append(f"Día {day_number} - {day_name}")
+                lines.append(f"- Enfoque: {focus}")
+
+                if isinstance(exercises, list):
+                    for exercise in exercises:
+                        if not isinstance(exercise, dict):
+                            continue
+
+                        exercise_name = exercise.get("exercise_name", "Ejercicio")
+                        sets = exercise.get("sets", 3)
+                        reps = exercise.get("reps", "10-12")
+                        rest_seconds = exercise.get("rest_seconds", 60)
+
+                        lines.append(
+                            f"- {exercise_name}: {sets} series x {reps} reps, descanso {rest_seconds} segundos."
+                        )
+
+        lines.extend([
+            "",
+            "Importante:",
+            "- Solo he usado ejercicios que existen en tu biblioteca.",
+            "- No he guardado todavía esta rutina.",
+        ])
+
+        if activate:
+            lines.append(
+                "- Si la aplicas, se guardará y quedará como rutina activa."
+            )
+        else:
+            lines.append(
+                "- Si la aplicas, se guardará en tus rutinas guardadas, pero no sustituirá tu rutina activa actual."
+            )
+
+        lines.extend([
+            "",
+            "¿Quieres guardar esta rutina?",
+        ])
+
+        return "\n".join(lines)
+
     if action_type == "add_workout_day":
         day = payload.get("day", {})
         exercises = day.get("exercises", [])
@@ -1777,6 +2283,13 @@ def detect_pending_action(
     user: User,
     message: str,
 ) -> Optional[Dict[str, Any]]:
+    if _is_create_workout_plan_request(message):
+        return _build_create_workout_plan_action(
+            db=db,
+            user=user,
+            message=message,
+        )
+    
     if _is_update_exercise_config_request(message):
         return _build_update_exercise_config_action(
             db=db,

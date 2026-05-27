@@ -1084,12 +1084,143 @@ def _apply_schedule_workout(
         "duration_minutes": scheduled_workout.duration_minutes,
     }
 
+def _apply_create_workout_plan(
+    db: Session,
+    user: User,
+    pending_action: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = pending_action.get("payload") or {}
+    workout_payload = payload.get("workout")
+    activate = payload.get("activate") is True
+
+    if not isinstance(workout_payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene una rutina válida",
+        )
+
+    title = workout_payload.get("title") or "Rutina IA"
+    summary = workout_payload.get("summary")
+    goal = workout_payload.get("goal")
+    level = workout_payload.get("level")
+    days_per_week = workout_payload.get("days_per_week")
+    duration_minutes = workout_payload.get("duration_minutes")
+    days = workout_payload.get("days")
+
+    if not isinstance(days, list) or not days:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La rutina propuesta no contiene días válidos",
+        )
+
+    for day in days:
+        if not isinstance(day, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La rutina contiene días con formato inválido",
+            )
+
+        exercises = day.get("exercises")
+
+        if not isinstance(exercises, list) or not exercises:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La rutina contiene días sin ejercicios",
+            )
+
+        _validate_exercises_exist(
+            db=db,
+            exercises=exercises,
+        )
+
+    try:
+        parsed_days_per_week = int(days_per_week)
+    except Exception:
+        parsed_days_per_week = len(days)
+
+    parsed_duration = None
+
+    if duration_minutes is not None:
+        try:
+            parsed_duration = int(duration_minutes)
+        except Exception:
+            parsed_duration = None
+
+    clean_workout = {
+        "title": title,
+        "summary": summary,
+        "goal": goal,
+        "level": level,
+        "days_per_week": parsed_days_per_week,
+        "duration_minutes": parsed_duration,
+        "source": workout_payload.get("source") or "AI_ACTION",
+        "days": days,
+    }
+
+    if activate:
+        (
+            db.query(SavedWorkout)
+            .filter(
+                SavedWorkout.user_id == user.id,
+                SavedWorkout.is_active == True,
+            )
+            .update(
+                {
+                    SavedWorkout.is_active: False,
+                }
+            )
+        )
+
+    saved_workout = SavedWorkout(
+        user_id=user.id,
+        title=title,
+        summary=summary,
+        goal=goal,
+        level=level,
+        days_per_week=parsed_days_per_week,
+        duration_minutes=parsed_duration,
+        content_json=_save_content_json(clean_workout),
+        is_active=activate,
+    )
+
+    db.add(saved_workout)
+    db.commit()
+    db.refresh(saved_workout)
+
+    return {
+        "success": True,
+        "saved_workout_id": saved_workout.id,
+        "workout_title": saved_workout.title,
+        "days_per_week": saved_workout.days_per_week,
+        "duration_minutes": saved_workout.duration_minutes,
+        "is_active": saved_workout.is_active,
+    }
+
 def apply_pending_action(
     db: Session,
     user: User,
     pending_action: Dict[str, Any],
 ) -> Dict[str, Any]:
     action_type = pending_action.get("type")
+
+    if action_type == "create_workout_plan":
+        data = _apply_create_workout_plan(
+            db=db,
+            user=user,
+            pending_action=pending_action,
+        )
+
+        if data.get("is_active") is True:
+            message = "La rutina se ha guardado correctamente y se ha establecido como rutina activa."
+        else:
+            message = "La rutina se ha guardado correctamente en tus rutinas guardadas."
+
+        return {
+            "success": True,
+            "message": message,
+            "action_type": action_type,
+            "data": data,
+        }
 
     if action_type == "add_workout_day":
         data = _apply_add_workout_day(
