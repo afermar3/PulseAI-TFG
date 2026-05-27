@@ -326,7 +326,7 @@ def _extract_day_number(message: str) -> Optional[int]:
         try:
             day_number = int(numeric_match.group(1))
 
-            if 1 <= day_number <= 7:
+            if day_number >= 1:
                 return day_number
         except Exception:
             pass
@@ -339,6 +339,9 @@ def _extract_day_number(message: str) -> Optional[int]:
         ("dia cinco", 5),
         ("dia seis", 6),
         ("dia siete", 7),
+        ("dia ocho", 8),
+        ("dia nueve", 9),
+        ("dia diez", 10),
     ]
 
     for pattern, day_number in day_patterns:
@@ -680,6 +683,444 @@ def _build_add_exercise_to_day_action(
     }
 
 
+def _is_update_exercise_config_request(message: str) -> bool:
+    text = _normalize(message)
+
+    action_keywords = [
+        "cambia",
+        "cambiame",
+        "actualiza",
+        "modifica",
+        "pon",
+        "ponme",
+        "ajusta",
+    ]
+
+    config_keywords = [
+        "serie",
+        "series",
+        "repeticion",
+        "repeticiones",
+        "reps",
+        "rep",
+        "descanso",
+        "segundos",
+        "segundo",
+        "minutos",
+        "minuto",
+    ]
+
+    has_action = any(keyword in text for keyword in action_keywords)
+    has_config = any(keyword in text for keyword in config_keywords)
+    has_day = _extract_day_number(message) is not None
+
+    return has_action and has_config and has_day and " por " not in text
+
+
+def _extract_sets(message: str) -> Optional[int]:
+    text = _normalize(message)
+
+    patterns = [
+        r"(\d+)\s*series",
+        r"(\d+)\s*serie",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text)
+
+        if match:
+            try:
+                value = int(match.group(1))
+
+                if 1 <= value <= 20:
+                    return value
+            except Exception:
+                pass
+
+    return None
+
+
+def _extract_reps(message: str) -> Optional[str]:
+    text = _normalize(message)
+
+    patterns = [
+        r"(\d+)\s*repeticiones",
+        r"(\d+)\s*repeticion",
+        r"(\d+)\s*reps",
+        r"(\d+)\s*rep",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, text)
+
+        if match:
+            return match.group(1)
+
+    match = re.search(r"\d+\s*series?\s*de\s*(\d+)", text)
+
+    if match:
+        return match.group(1)
+
+    return None
+
+
+def _extract_rest_seconds(message: str) -> Optional[int]:
+    text = _normalize(message)
+
+    second_patterns = [
+        r"descanso\s*(?:de)?\s*(\d+)\s*segundos",
+        r"descanso\s*(?:de)?\s*(\d+)\s*segundo",
+        r"(\d+)\s*segundos\s*de\s*descanso",
+        r"(\d+)\s*segundo\s*de\s*descanso",
+    ]
+
+    for pattern in second_patterns:
+        match = re.search(pattern, text)
+
+        if match:
+            try:
+                value = int(match.group(1))
+
+                if 0 <= value <= 600:
+                    return value
+            except Exception:
+                pass
+
+    minute_patterns = [
+        r"descanso\s*(?:de)?\s*(\d+)\s*minutos",
+        r"descanso\s*(?:de)?\s*(\d+)\s*minuto",
+        r"(\d+)\s*minutos\s*de\s*descanso",
+        r"(\d+)\s*minuto\s*de\s*descanso",
+    ]
+
+    for pattern in minute_patterns:
+        match = re.search(pattern, text)
+
+        if match:
+            try:
+                value = int(match.group(1)) * 60
+
+                if 0 <= value <= 600:
+                    return value
+            except Exception:
+                pass
+
+    if "descanso" in text:
+        match = re.search(r"\ba\s*(\d+)\s*segundos\b", text)
+
+        if match:
+            try:
+                value = int(match.group(1))
+
+                if 0 <= value <= 600:
+                    return value
+            except Exception:
+                pass
+
+        match = re.search(r"\ba\s*(\d+)\s*segundo\b", text)
+
+        if match:
+            try:
+                value = int(match.group(1))
+
+                if 0 <= value <= 600:
+                    return value
+            except Exception:
+                pass
+
+        match = re.search(r"\ba\s*(\d+)\s*minutos\b", text)
+
+        if match:
+            try:
+                value = int(match.group(1)) * 60
+
+                if 0 <= value <= 600:
+                    return value
+            except Exception:
+                pass
+
+        match = re.search(r"\ba\s*(\d+)\s*minuto\b", text)
+
+        if match:
+            try:
+                value = int(match.group(1)) * 60
+
+                if 0 <= value <= 600:
+                    return value
+            except Exception:
+                pass
+
+    return None
+
+
+def _clean_message_for_update_exercise_search(message: str) -> str:
+    text = _normalize(message)
+
+    text = re.sub(r"\bdia\s*\d+\b", " ", text)
+    text = re.sub(r"\d+\s*series?\s*de\s*\d+", " ", text)
+    text = re.sub(r"\d+\s*series?", " ", text)
+    text = re.sub(r"\d+\s*repeticiones?", " ", text)
+    text = re.sub(r"\d+\s*reps?", " ", text)
+    text = re.sub(r"\d+\s*rep", " ", text)
+    text = re.sub(r"\d+\s*segundos?", " ", text)
+    text = re.sub(r"\d+\s*minutos?", " ", text)
+
+    removable_words = [
+        "cambia",
+        "cambiame",
+        "actualiza",
+        "modifica",
+        "pon",
+        "ponme",
+        "ajusta",
+        "el",
+        "la",
+        "los",
+        "las",
+        "de",
+        "del",
+        "en",
+        "al",
+        "a",
+        "con",
+        "serie",
+        "series",
+        "repeticion",
+        "repeticiones",
+        "reps",
+        "rep",
+        "descanso",
+        "segundo",
+        "segundos",
+        "minuto",
+        "minutos",
+    ]
+
+    for word in removable_words:
+        text = re.sub(rf"\b{re.escape(word)}\b", " ", text)
+
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
+def _find_exercise_in_day_by_message(
+    day: Dict[str, Any],
+    message: str,
+) -> Optional[Dict[str, Any]]:
+    clean_text = _clean_message_for_update_exercise_search(message)
+
+    if not clean_text:
+        return None
+
+    exercises = day.get("exercises")
+
+    if not isinstance(exercises, list):
+        return None
+
+    best_match = None
+    best_score = 0
+
+    for exercise in exercises:
+        if not isinstance(exercise, dict):
+            continue
+
+        exercise_name = (
+            exercise.get("exercise_name")
+            or exercise.get("name")
+            or ""
+        )
+
+        normalized_name = _normalize(str(exercise_name))
+
+        if not normalized_name:
+            continue
+
+        score = 0
+
+        if normalized_name == clean_text:
+            score = 200
+        elif normalized_name in clean_text:
+            score = 160
+        elif clean_text in normalized_name:
+            score = 120
+        else:
+            exercise_words = [
+                word
+                for word in normalized_name.split()
+                if len(word) >= 4
+            ]
+
+            clean_words = [
+                word
+                for word in clean_text.split()
+                if len(word) >= 4
+            ]
+
+            for word in exercise_words:
+                if word in clean_words or word in clean_text:
+                    score += 35
+
+            for word in clean_words:
+                if word in normalized_name:
+                    score += 25
+
+        if score > best_score:
+            best_score = score
+            best_match = exercise
+
+    if best_score <= 0:
+        return None
+
+    return best_match
+
+
+def _build_update_exercise_config_action(
+    db: Session,
+    user: User,
+    message: str,
+) -> Dict[str, Any]:
+    active_workout = _get_active_workout(db=db, user=user)
+
+    if active_workout is None:
+        return {
+            "type": "create_workout_plan",
+            "title": "Crear una rutina antes de editar ejercicios",
+            "description": "No tienes una rutina activa. Antes de editar ejercicios, habría que crear o activar una rutina.",
+            "requires_confirmation": False,
+            "payload": {
+                "reason": "NO_ACTIVE_WORKOUT",
+                "original_message": message,
+            },
+        }
+
+    day_number = _extract_day_number(message)
+
+    if day_number is None:
+        return {
+            "type": "missing_day",
+            "title": "Falta indicar el día",
+            "description": "He entendido que quieres editar un ejercicio, pero necesito saber en qué día de la rutina está.",
+            "requires_confirmation": False,
+            "payload": {
+                "saved_workout_id": active_workout.id,
+                "workout_title": active_workout.title,
+                "original_message": message,
+            },
+        }
+
+    content = _parse_content_json(active_workout.content_json)
+    days = content.get("days")
+
+    if not isinstance(days, list) or day_number < 1 or day_number > len(days):
+        return {
+            "type": "invalid_day",
+            "title": "Día no encontrado",
+            "description": f"No he encontrado el día {day_number} en tu rutina activa.",
+            "requires_confirmation": False,
+            "payload": {
+                "saved_workout_id": active_workout.id,
+                "workout_title": active_workout.title,
+                "day_number": day_number,
+                "available_days": len(days) if isinstance(days, list) else 0,
+                "original_message": message,
+            },
+        }
+
+    updates: Dict[str, Any] = {}
+
+    sets = _extract_sets(message)
+    reps = _extract_reps(message)
+    rest_seconds = _extract_rest_seconds(message)
+
+    if sets is not None:
+        updates["sets"] = sets
+
+    if reps is not None:
+        updates["reps"] = reps
+
+    if rest_seconds is not None:
+        updates["rest_seconds"] = rest_seconds
+
+    if not updates:
+        return {
+            "type": "missing_update_values",
+            "title": "No he detectado qué cambiar",
+            "description": "He entendido que quieres editar un ejercicio, pero no he detectado nuevas series, repeticiones o descanso.",
+            "requires_confirmation": False,
+            "payload": {
+                "saved_workout_id": active_workout.id,
+                "workout_title": active_workout.title,
+                "day_number": day_number,
+                "original_message": message,
+            },
+        }
+
+    day = days[day_number - 1]
+
+    if not isinstance(day, dict):
+        return {
+            "type": "invalid_day",
+            "title": "Día no válido",
+            "description": f"El día {day_number} no tiene un formato válido.",
+            "requires_confirmation": False,
+            "payload": {
+                "saved_workout_id": active_workout.id,
+                "workout_title": active_workout.title,
+                "day_number": day_number,
+                "original_message": message,
+            },
+        }
+
+    exercise = _find_exercise_in_day_by_message(
+        day=day,
+        message=message,
+    )
+
+    if exercise is None:
+        return {
+            "type": "missing_exercise",
+            "title": "Ejercicio no encontrado",
+            "description": f"No he encontrado ese ejercicio dentro del día {day_number}.",
+            "requires_confirmation": False,
+            "payload": {
+                "saved_workout_id": active_workout.id,
+                "workout_title": active_workout.title,
+                "day_number": day_number,
+                "original_message": message,
+            },
+        }
+
+    exercise_name = (
+        exercise.get("exercise_name")
+        or exercise.get("name")
+        or "Ejercicio"
+    )
+
+    day_name = day.get("name") or f"Día {day_number}"
+
+    return {
+        "type": "update_exercise_config",
+        "title": f"Actualizar {exercise_name}",
+        "description": (
+            f"Se actualizará la configuración de {exercise_name} "
+            f"en el día {day_number}."
+        ),
+        "requires_confirmation": True,
+        "payload": {
+            "target": "active_workout",
+            "saved_workout_id": active_workout.id,
+            "workout_title": active_workout.title,
+            "day_number": day_number,
+            "day_name": day_name,
+            "exercise_id": exercise.get("exercise_id"),
+            "exercise_name": exercise_name,
+            "updates": updates,
+            "original_message": message,
+        },
+    }
+
+
 def _is_schedule_workout_request(message: str) -> bool:
     text = _normalize(message)
 
@@ -763,11 +1204,57 @@ def _is_replace_exercise_request(message: str) -> bool:
     return any(keyword in text for keyword in replace_keywords) and " por " in text
 
 
-def _build_replace_exercise_action(message: str) -> Dict[str, Any]:
+def _remove_day_reference_from_text(text: str) -> str:
+    text = _normalize(text)
+
+    text = re.sub(
+        r"\b(?:del|de|en\s+el|en|al)?\s*dia\s*\d+\b",
+        " ",
+        text,
+    )
+
+    day_words = [
+        "dia uno",
+        "dia dos",
+        "dia tres",
+        "dia cuatro",
+        "dia cinco",
+        "dia seis",
+        "dia siete",
+    ]
+
+    for day_word in day_words:
+        text = text.replace(day_word, " ")
+
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
+def _build_replace_exercise_action(
+    db: Session,
+    user: User,
+    message: str,
+) -> Dict[str, Any]:
+    active_workout = _get_active_workout(db=db, user=user)
+
+    if active_workout is None:
+        return {
+            "type": "create_workout_plan",
+            "title": "Crear una rutina antes de sustituir ejercicios",
+            "description": "No tienes una rutina activa. Antes de sustituir ejercicios, habría que crear o activar una rutina.",
+            "requires_confirmation": False,
+            "payload": {
+                "reason": "NO_ACTIVE_WORKOUT",
+                "original_message": message,
+            },
+        }
+
+    day_number = _extract_day_number(message)
     normalized_text = _normalize(message)
 
-    old_exercise = None
-    new_exercise = None
+    old_exercise_text = None
+    new_exercise_text = None
 
     if " por " in normalized_text:
         parts = normalized_text.split(" por ", 1)
@@ -780,21 +1267,72 @@ def _build_replace_exercise_action(message: str) -> Dict[str, Any]:
 
         old_part = old_part.replace("el ejercicio", "")
         old_part = old_part.replace("ejercicio", "")
+
+        old_part = _remove_day_reference_from_text(old_part)
+        new_part = _remove_day_reference_from_text(new_part)
+
         old_part = old_part.strip(" :,-.")
         new_part = new_part.strip(" :,-.")
 
-        old_exercise = old_part if old_part else None
-        new_exercise = new_part if new_part else None
+        old_exercise_text = old_part if old_part else None
+        new_exercise_text = new_part if new_part else None
+
+    if not old_exercise_text or not new_exercise_text:
+        return {
+            "type": "invalid_replace_request",
+            "title": "No he entendido la sustitución",
+            "description": (
+                "Para sustituir un ejercicio, usa un formato como: "
+                "Cámbiame crunch abdominal por flexiones, o "
+                "Cámbiame del día 2 crunch abdominal por flexiones."
+            ),
+            "requires_confirmation": False,
+            "payload": {
+                "original_message": message,
+            },
+        }
+
+    new_exercise = _find_exercise_by_message(
+        db=db,
+        message=new_exercise_text,
+    )
+
+    if new_exercise is None:
+        return {
+            "type": "missing_exercise",
+            "title": "Ejercicio nuevo no encontrado",
+            "description": f"No he encontrado '{new_exercise_text}' en tu biblioteca de ejercicios.",
+            "requires_confirmation": False,
+            "payload": {
+                "saved_workout_id": active_workout.id,
+                "workout_title": active_workout.title,
+                "day_number": day_number,
+                "old_exercise": old_exercise_text,
+                "new_exercise": new_exercise_text,
+                "original_message": message,
+            },
+        }
+
+    day_text = f" en el día {day_number}" if day_number is not None else ""
 
     return {
         "type": "replace_exercise",
-        "title": "Sustituir ejercicio",
-        "description": "Se preparará una sustitución de ejercicio en tu rutina activa.",
+        "title": f"Sustituir {old_exercise_text} por {new_exercise.name}",
+        "description": (
+            f"Se sustituirá {old_exercise_text} por {new_exercise.name}"
+            f"{day_text} de tu rutina activa."
+        ),
         "requires_confirmation": True,
         "payload": {
             "target": "active_workout",
-            "old_exercise": old_exercise,
-            "new_exercise": new_exercise,
+            "saved_workout_id": active_workout.id,
+            "workout_title": active_workout.title,
+            "day_number": day_number,
+            "old_exercise": old_exercise_text,
+            "new_exercise": {
+                "exercise_id": new_exercise.id,
+                "exercise_name": new_exercise.name,
+            },
             "original_message": message,
         },
     }
@@ -879,6 +1417,76 @@ def build_pending_action_answer(
             "¿Quieres que lo añada a ese día?",
         ])
 
+    if action_type == "replace_exercise":
+        old_exercise = payload.get("old_exercise") or "ejercicio actual"
+        new_exercise = payload.get("new_exercise") or {}
+        workout_title = payload.get("workout_title", "tu rutina activa")
+        day_number = payload.get("day_number")
+
+        if isinstance(new_exercise, dict):
+            new_exercise_name = new_exercise.get("exercise_name", "nuevo ejercicio")
+        else:
+            new_exercise_name = str(new_exercise)
+
+        lines = [
+            "He preparado una propuesta de sustitución de ejercicio.",
+            "",
+            "Propuesta:",
+            f"- Rutina: {workout_title}",
+        ]
+
+        if day_number is not None:
+            lines.append(f"- Día: {day_number}")
+
+        lines.extend([
+            f"- Sustituir: {old_exercise}",
+            f"- Por: {new_exercise_name}",
+            "",
+            "Importante:",
+            "- El nuevo ejercicio existe en tu biblioteca.",
+            "- Mantendré las series, repeticiones y descanso del ejercicio anterior.",
+            "- No he aplicado todavía el cambio.",
+            "",
+            "¿Quieres que lo aplique a tu rutina activa?",
+        ])
+
+        return "\n".join(lines)
+
+    if action_type == "update_exercise_config":
+        workout_title = payload.get("workout_title", "tu rutina activa")
+        day_number = payload.get("day_number", "No especificado")
+        day_name = payload.get("day_name", f"Día {day_number}")
+        exercise_name = payload.get("exercise_name", "Ejercicio")
+        updates = payload.get("updates", {})
+
+        lines = [
+            "He preparado una propuesta para actualizar un ejercicio de tu rutina.",
+            "",
+            "Propuesta:",
+            f"- Rutina: {workout_title}",
+            f"- Día: {day_number} - {day_name}",
+            f"- Ejercicio: {exercise_name}",
+        ]
+
+        if "sets" in updates:
+            lines.append(f"- Series: {updates['sets']}")
+
+        if "reps" in updates:
+            lines.append(f"- Repeticiones: {updates['reps']}")
+
+        if "rest_seconds" in updates:
+            lines.append(f"- Descanso: {updates['rest_seconds']} segundos")
+
+        lines.extend([
+            "",
+            "Importante:",
+            "- No he aplicado todavía el cambio.",
+            "",
+            "¿Quieres que actualice este ejercicio?",
+        ])
+
+        return "\n".join(lines)
+
     if action_type == "missing_exercises":
         return (
             f"{title}\n\n"
@@ -911,17 +1519,17 @@ def build_pending_action_answer(
             "Revisa el nombre del ejercicio en tu biblioteca y vuelve a intentarlo."
         )
 
-    if action_type == "replace_exercise":
-        old_exercise = payload.get("old_exercise") or "ejercicio actual"
-        new_exercise = payload.get("new_exercise") or "nuevo ejercicio"
-
+    if action_type == "missing_update_values":
         return (
-            "He preparado una propuesta de sustitución de ejercicio.\n\n"
-            "Propuesta:\n"
-            f"- Sustituir: {old_exercise}\n"
-            f"- Por: {new_exercise}\n\n"
-            "No he aplicado todavía el cambio.\n\n"
-            "¿Quieres que lo aplique a tu rutina activa?"
+            f"{title}\n\n"
+            f"{description}\n\n"
+            "Ejemplo: “Cambia flexiones del día 1 a 4 series de 12 repeticiones”."
+        )
+
+    if action_type == "invalid_replace_request":
+        return (
+            f"{title}\n\n"
+            f"{description}"
         )
 
     if action_type == "schedule_workout":
@@ -951,8 +1559,19 @@ def detect_pending_action(
     user: User,
     message: str,
 ) -> Optional[Dict[str, Any]]:
+    if _is_update_exercise_config_request(message):
+        return _build_update_exercise_config_action(
+            db=db,
+            user=user,
+            message=message,
+        )
+
     if _is_replace_exercise_request(message):
-        return _build_replace_exercise_action(message)
+        return _build_replace_exercise_action(
+            db=db,
+            user=user,
+            message=message,
+        )
 
     if _is_add_exercise_to_day_request(message):
         return _build_add_exercise_to_day_action(

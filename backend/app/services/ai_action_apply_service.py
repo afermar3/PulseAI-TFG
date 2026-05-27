@@ -1,6 +1,6 @@
 import json
 import unicodedata
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -97,10 +97,14 @@ def _exercise_exists_in_day(
     exercises: List[Dict[str, Any]],
     exercise_id: int,
     exercise_name: str,
+    ignored_index: Optional[int] = None,
 ) -> bool:
     normalized_new_name = _normalize(exercise_name)
 
-    for exercise in exercises:
+    for index, exercise in enumerate(exercises):
+        if ignored_index is not None and index == ignored_index:
+            continue
+
         if not isinstance(exercise, dict):
             continue
 
@@ -120,6 +124,31 @@ def _exercise_exists_in_day(
 
         if existing_name and _normalize(str(existing_name)) == normalized_new_name:
             return True
+
+    return False
+
+
+def _is_same_exercise(
+    old_exercise: Dict[str, Any],
+    new_exercise_id: int,
+    new_exercise_name: str,
+) -> bool:
+    old_exercise_id = old_exercise.get("exercise_id")
+    old_exercise_name = (
+        old_exercise.get("exercise_name")
+        or old_exercise.get("name")
+        or ""
+    )
+
+    if old_exercise_id is not None:
+        try:
+            if int(old_exercise_id) == int(new_exercise_id):
+                return True
+        except Exception:
+            pass
+
+    if old_exercise_name:
+        return _normalize(str(old_exercise_name)) == _normalize(new_exercise_name)
 
     return False
 
@@ -401,6 +430,538 @@ def _apply_add_exercise_to_day(
     }
 
 
+def _find_exercise_in_days(
+    days: List[Dict[str, Any]],
+    old_exercise_text: str,
+    day_number: Optional[int] = None,
+):
+    normalized_old = _normalize(old_exercise_text)
+
+    start_index = 0
+    end_index = len(days)
+
+    if day_number is not None:
+        day_index = int(day_number) - 1
+
+        if day_index < 0 or day_index >= len(days):
+            return None
+
+        start_index = day_index
+        end_index = day_index + 1
+
+    for day_index in range(start_index, end_index):
+        day = days[day_index]
+
+        if not isinstance(day, dict):
+            continue
+
+        exercises = day.get("exercises")
+
+        if not isinstance(exercises, list):
+            continue
+
+        for exercise_index, exercise in enumerate(exercises):
+            if not isinstance(exercise, dict):
+                continue
+
+            exercise_name = (
+                exercise.get("exercise_name")
+                or exercise.get("name")
+                or ""
+            )
+
+            normalized_name = _normalize(str(exercise_name))
+
+            if normalized_old == normalized_name:
+                return day_index, exercise_index, exercise
+
+            if normalized_old in normalized_name:
+                return day_index, exercise_index, exercise
+
+            if normalized_name in normalized_old:
+                return day_index, exercise_index, exercise
+
+    return None
+
+
+def _find_exercise_for_update(
+    exercises: List[Dict[str, Any]],
+    exercise_id: Any,
+    exercise_name: str,
+):
+    normalized_target_name = _normalize(exercise_name)
+
+    for index, exercise in enumerate(exercises):
+        if not isinstance(exercise, dict):
+            continue
+
+        current_id = exercise.get("exercise_id")
+        current_name = (
+            exercise.get("exercise_name")
+            or exercise.get("name")
+            or ""
+        )
+
+        if exercise_id is not None and current_id is not None:
+            try:
+                if int(current_id) == int(exercise_id):
+                    return index, exercise
+            except Exception:
+                pass
+
+        if current_name and _normalize(str(current_name)) == normalized_target_name:
+            return index, exercise
+
+    return None
+
+
+def _apply_update_exercise_config(
+    db: Session,
+    user: User,
+    pending_action: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = pending_action.get("payload") or {}
+
+    saved_workout_id = payload.get("saved_workout_id")
+    day_number = payload.get("day_number")
+    exercise_id = payload.get("exercise_id")
+    exercise_name = payload.get("exercise_name")
+    updates = payload.get("updates")
+
+    if saved_workout_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene saved_workout_id",
+        )
+
+    if day_number is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene day_number",
+        )
+
+    if not exercise_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene el nombre del ejercicio",
+        )
+
+    if not isinstance(updates, dict) or not updates:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene cambios válidos",
+        )
+
+    allowed_updates = {"sets", "reps", "rest_seconds"}
+    clean_updates: Dict[str, Any] = {}
+
+    for key, value in updates.items():
+        if key not in allowed_updates:
+            continue
+
+        if key == "sets":
+            try:
+                parsed_value = int(value)
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El valor de series no es válido",
+                )
+
+            if parsed_value < 1 or parsed_value > 20:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El valor de series debe estar entre 1 y 20",
+                )
+
+            clean_updates[key] = parsed_value
+
+        elif key == "reps":
+            text_value = str(value).strip()
+
+            if not text_value:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El valor de repeticiones no es válido",
+                )
+
+            clean_updates[key] = text_value
+
+        elif key == "rest_seconds":
+            try:
+                parsed_value = int(value)
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El valor de descanso no es válido",
+                )
+
+            if parsed_value < 0 or parsed_value > 600:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="El descanso debe estar entre 0 y 600 segundos",
+                )
+
+            clean_updates[key] = parsed_value
+
+    if not clean_updates:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hay cambios válidos para aplicar",
+        )
+
+    workout = _get_user_workout(
+        db=db,
+        user=user,
+        saved_workout_id=int(saved_workout_id),
+    )
+
+    content = _parse_content_json(workout.content_json)
+    days = content.get("days")
+
+    if not isinstance(days, list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La rutina no contiene días válidos",
+        )
+
+    try:
+        parsed_day_number = int(day_number)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El número de día no es válido",
+        )
+
+    day_index = parsed_day_number - 1
+
+    if day_index < 0 or day_index >= len(days):
+        return {
+            "success": False,
+            "invalid_day": True,
+            "not_found": False,
+            "no_changes": False,
+            "saved_workout_id": workout.id,
+            "workout_title": workout.title,
+            "day_number": parsed_day_number,
+            "available_days": len(days),
+            "exercise_name": exercise_name,
+            "updates": clean_updates,
+        }
+
+    selected_day = days[day_index]
+
+    if not isinstance(selected_day, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El día seleccionado no tiene formato válido",
+        )
+
+    exercises = selected_day.get("exercises")
+
+    if not isinstance(exercises, list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El día seleccionado no contiene ejercicios válidos",
+        )
+
+    found = _find_exercise_for_update(
+        exercises=exercises,
+        exercise_id=exercise_id,
+        exercise_name=str(exercise_name),
+    )
+
+    if found is None:
+        return {
+            "success": False,
+            "invalid_day": False,
+            "not_found": True,
+            "no_changes": False,
+            "saved_workout_id": workout.id,
+            "workout_title": workout.title,
+            "day_number": parsed_day_number,
+            "day_name": selected_day.get("name") or f"Día {parsed_day_number}",
+            "exercise_name": exercise_name,
+            "updates": clean_updates,
+        }
+
+    exercise_index, exercise = found
+
+    before = {
+        "sets": exercise.get("sets"),
+        "reps": exercise.get("reps"),
+        "rest_seconds": exercise.get("rest_seconds"),
+    }
+
+    applied_updates: Dict[str, Any] = {}
+
+    for key, value in clean_updates.items():
+        current_value = exercise.get(key)
+
+        if str(current_value) != str(value):
+            exercise[key] = value
+            applied_updates[key] = value
+
+    if not applied_updates:
+        return {
+            "success": False,
+            "invalid_day": False,
+            "not_found": False,
+            "no_changes": True,
+            "saved_workout_id": workout.id,
+            "workout_title": workout.title,
+            "day_number": parsed_day_number,
+            "day_name": selected_day.get("name") or f"Día {parsed_day_number}",
+            "exercise_name": (
+                exercise.get("exercise_name")
+                or exercise.get("name")
+                or exercise_name
+            ),
+            "before": before,
+            "updates": clean_updates,
+        }
+
+    exercises[exercise_index] = exercise
+    selected_day["exercises"] = exercises
+    days[day_index] = selected_day
+    content["days"] = days
+
+    workout.content_json = _save_content_json(content)
+
+    db.commit()
+    db.refresh(workout)
+
+    return {
+        "success": True,
+        "invalid_day": False,
+        "not_found": False,
+        "no_changes": False,
+        "saved_workout_id": workout.id,
+        "workout_title": workout.title,
+        "day_number": parsed_day_number,
+        "day_name": selected_day.get("name") or f"Día {parsed_day_number}",
+        "exercise_name": (
+            exercise.get("exercise_name")
+            or exercise.get("name")
+            or exercise_name
+        ),
+        "before": before,
+        "updates": applied_updates,
+    }
+
+
+def _apply_replace_exercise(
+    db: Session,
+    user: User,
+    pending_action: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = pending_action.get("payload") or {}
+
+    saved_workout_id = payload.get("saved_workout_id")
+    old_exercise_text = payload.get("old_exercise")
+    new_exercise_payload = payload.get("new_exercise")
+    day_number = payload.get("day_number")
+
+    if saved_workout_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene saved_workout_id",
+        )
+
+    if not old_exercise_text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene el ejercicio a sustituir",
+        )
+
+    if not isinstance(new_exercise_payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La acción no contiene un ejercicio nuevo válido",
+        )
+
+    new_exercise_id = new_exercise_payload.get("exercise_id")
+
+    if new_exercise_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El nuevo ejercicio no tiene ID real de la base de datos",
+        )
+
+    new_exercise = (
+        db.query(Exercise)
+        .filter(Exercise.id == int(new_exercise_id))
+        .first()
+    )
+
+    if new_exercise is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"El ejercicio con ID {new_exercise_id} no existe",
+        )
+
+    workout = _get_user_workout(
+        db=db,
+        user=user,
+        saved_workout_id=int(saved_workout_id),
+    )
+
+    content = _parse_content_json(workout.content_json)
+    days = content.get("days")
+
+    if not isinstance(days, list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La rutina no contiene días válidos",
+        )
+
+    parsed_day_number = None
+
+    if day_number is not None:
+        try:
+            parsed_day_number = int(day_number)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El número de día no es válido",
+            )
+
+        if parsed_day_number < 1 or parsed_day_number > len(days):
+            return {
+                "success": False,
+                "not_found": True,
+                "invalid_day": True,
+                "already_exists": False,
+                "same_exercise": False,
+                "saved_workout_id": workout.id,
+                "workout_title": workout.title,
+                "day_number": parsed_day_number,
+                "available_days": len(days),
+                "old_exercise": old_exercise_text,
+                "new_exercise": {
+                    "exercise_id": new_exercise.id,
+                    "exercise_name": new_exercise.name,
+                },
+            }
+
+    found = _find_exercise_in_days(
+        days=days,
+        old_exercise_text=str(old_exercise_text),
+        day_number=parsed_day_number,
+    )
+
+    if found is None:
+        return {
+            "success": False,
+            "not_found": True,
+            "invalid_day": False,
+            "already_exists": False,
+            "same_exercise": False,
+            "saved_workout_id": workout.id,
+            "workout_title": workout.title,
+            "day_number": parsed_day_number,
+            "old_exercise": old_exercise_text,
+            "new_exercise": {
+                "exercise_id": new_exercise.id,
+                "exercise_name": new_exercise.name,
+            },
+        }
+
+    day_index, exercise_index, old_exercise = found
+    selected_day = days[day_index]
+    exercises = selected_day.get("exercises")
+
+    if not isinstance(exercises, list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El día seleccionado no contiene ejercicios válidos",
+        )
+
+    old_exercise_name = (
+        old_exercise.get("exercise_name")
+        or old_exercise.get("name")
+        or str(old_exercise_text)
+    )
+
+    if _is_same_exercise(
+        old_exercise=old_exercise,
+        new_exercise_id=new_exercise.id,
+        new_exercise_name=new_exercise.name,
+    ):
+        return {
+            "success": False,
+            "same_exercise": True,
+            "already_exists": False,
+            "not_found": False,
+            "invalid_day": False,
+            "saved_workout_id": workout.id,
+            "workout_title": workout.title,
+            "day_number": day_index + 1,
+            "day_name": selected_day.get("name") or f"Día {day_index + 1}",
+            "old_exercise": old_exercise_name,
+            "new_exercise": {
+                "exercise_id": new_exercise.id,
+                "exercise_name": new_exercise.name,
+            },
+        }
+
+    if _exercise_exists_in_day(
+        exercises=exercises,
+        exercise_id=new_exercise.id,
+        exercise_name=new_exercise.name,
+        ignored_index=exercise_index,
+    ):
+        return {
+            "success": False,
+            "already_exists": True,
+            "same_exercise": False,
+            "not_found": False,
+            "invalid_day": False,
+            "saved_workout_id": workout.id,
+            "workout_title": workout.title,
+            "day_number": day_index + 1,
+            "day_name": selected_day.get("name") or f"Día {day_index + 1}",
+            "old_exercise": old_exercise_name,
+            "new_exercise": {
+                "exercise_id": new_exercise.id,
+                "exercise_name": new_exercise.name,
+            },
+        }
+
+    replacement_exercise = {
+        "exercise_id": new_exercise.id,
+        "exercise_name": new_exercise.name,
+        "sets": old_exercise.get("sets") or 3,
+        "reps": old_exercise.get("reps") or "10-12",
+        "rest_seconds": old_exercise.get("rest_seconds") or 60,
+        "notes": old_exercise.get("notes") or "",
+    }
+
+    exercises[exercise_index] = replacement_exercise
+    selected_day["exercises"] = exercises
+    days[day_index] = selected_day
+    content["days"] = days
+
+    workout.content_json = _save_content_json(content)
+
+    db.commit()
+    db.refresh(workout)
+
+    return {
+        "success": True,
+        "not_found": False,
+        "invalid_day": False,
+        "already_exists": False,
+        "same_exercise": False,
+        "saved_workout_id": workout.id,
+        "workout_title": workout.title,
+        "day_number": day_index + 1,
+        "day_name": selected_day.get("name") or f"Día {day_index + 1}",
+        "old_exercise": old_exercise_name,
+        "new_exercise": replacement_exercise,
+    }
+
+
 def apply_pending_action(
     db: Session,
     user: User,
@@ -440,6 +1001,108 @@ def apply_pending_action(
         return {
             "success": True,
             "message": "El ejercicio se ha añadido correctamente al día seleccionado.",
+            "action_type": action_type,
+            "data": data,
+        }
+
+    if action_type == "replace_exercise":
+        data = _apply_replace_exercise(
+            db=db,
+            user=user,
+            pending_action=pending_action,
+        )
+
+        if data.get("invalid_day") is True:
+            return {
+                "success": False,
+                "message": "El día indicado no existe en tu rutina activa.",
+                "action_type": action_type,
+                "data": data,
+            }
+
+        if data.get("same_exercise") is True:
+            return {
+                "success": False,
+                "message": "El ejercicio nuevo es el mismo que el ejercicio actual. No se ha realizado ningún cambio.",
+                "action_type": action_type,
+                "data": data,
+            }
+
+        if data.get("already_exists") is True:
+            day_number = data.get("day_number")
+
+            return {
+                "success": False,
+                "message": (
+                    f"El ejercicio nuevo ya existe en el día {day_number}. "
+                    "No se ha realizado la sustitución para evitar duplicados."
+                ),
+                "action_type": action_type,
+                "data": data,
+            }
+
+        if data.get("not_found") is True:
+            day_number = data.get("day_number")
+
+            if day_number is not None:
+                message = (
+                    f"No he encontrado el ejercicio que querías sustituir "
+                    f"dentro del día {day_number}."
+                )
+            else:
+                message = (
+                    "No he encontrado el ejercicio que querías sustituir "
+                    "dentro de tu rutina activa."
+                )
+
+            return {
+                "success": False,
+                "message": message,
+                "action_type": action_type,
+                "data": data,
+            }
+
+        return {
+            "success": True,
+            "message": "El ejercicio se ha sustituido correctamente en tu rutina activa.",
+            "action_type": action_type,
+            "data": data,
+        }
+
+    if action_type == "update_exercise_config":
+        data = _apply_update_exercise_config(
+            db=db,
+            user=user,
+            pending_action=pending_action,
+        )
+
+        if data.get("invalid_day") is True:
+            return {
+                "success": False,
+                "message": "El día indicado no existe en tu rutina activa.",
+                "action_type": action_type,
+                "data": data,
+            }
+
+        if data.get("not_found") is True:
+            return {
+                "success": False,
+                "message": "No he encontrado el ejercicio indicado dentro del día seleccionado.",
+                "action_type": action_type,
+                "data": data,
+            }
+
+        if data.get("no_changes") is True:
+            return {
+                "success": False,
+                "message": "El ejercicio ya tenía esos valores. No se ha realizado ningún cambio.",
+                "action_type": action_type,
+                "data": data,
+            }
+
+        return {
+            "success": True,
+            "message": "La configuración del ejercicio se ha actualizado correctamente.",
             "action_type": action_type,
             "data": data,
         }

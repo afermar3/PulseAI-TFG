@@ -32,6 +32,7 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
   bool isLoadingStreak = true;
 
   List<Map<String, dynamic>> upcomingScheduledWorkouts = [];
+  Map<String, dynamic>? todayScheduledWorkout;
   bool isLoadingScheduledWorkouts = true;
 
   Map<int, int> activeDayCompletedExercises = {};
@@ -56,6 +57,36 @@ class _WorkoutTrackerViewState extends State<WorkoutTrackerView> {
 
   int _getDayNumberFromDay(Map<String, dynamic> day, int index) {
     return _parseInt(day["day_number"]) ?? index + 1;
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  int _findDayIndexByDayNumber({
+    required Map<String, dynamic> workoutContent,
+    required int? dayNumber,
+  }) {
+    final days = workoutContent["days"];
+
+    if (dayNumber == null || days is! List) {
+      return 0;
+    }
+
+    for (int i = 0; i < days.length; i++) {
+      final rawDay = days[i];
+
+      if (rawDay is Map) {
+        final day = Map<String, dynamic>.from(rawDay);
+        final currentDayNumber = _parseInt(day["day_number"]) ?? i + 1;
+
+        if (currentDayNumber == dayNumber) {
+          return i;
+        }
+      }
+    }
+
+    return 0;
   }
 
   Future<void> _loadActiveWorkout() async {
@@ -225,68 +256,83 @@ Future<void> _loadWorkoutStreak() async {
 
 
 
-  Future<void> _loadUpcomingScheduledWorkouts() async {
-    try {
-      final result = await ScheduledWorkoutService.getMyScheduledWorkouts();
+Future<void> _loadUpcomingScheduledWorkouts() async {
+  try {
+    final result = await ScheduledWorkoutService.getMyScheduledWorkouts();
 
-      final now = DateTime.now();
+    final now = DateTime.now();
 
-      final workouts = result.map((item) {
-        final map = Map<String, dynamic>.from(item as Map);
+    final allWorkouts = result.map((item) {
+      final map = Map<String, dynamic>.from(item as Map);
 
-        DateTime scheduledDate;
+      DateTime scheduledDate;
 
-        try {
-          scheduledDate = DateTime.parse(map["scheduled_date"].toString());
-        } catch (_) {
-          scheduledDate = now;
-        }
+      try {
+        scheduledDate = DateTime.parse(map["scheduled_date"].toString());
+      } catch (_) {
+        scheduledDate = now;
+      }
 
-        final durationMinutes = map["duration_minutes"] as int? ?? 45;
-        final estimatedKcal = durationMinutes * 6;
+      final durationMinutes = _parseInt(map["duration_minutes"]) ?? 45;
+      final estimatedKcal = durationMinutes * 6;
 
-        return {
-          "id": map["id"],
-          "saved_workout_id": map["saved_workout_id"],
-          "completed_session_id": map["completed_session_id"],
-          "title": map["workout_title"]?.toString() ?? "Entrenamiento",
-          "subtitle": map["day_name"]?.toString() ?? "Rutina",
-          "day_number": map["day_number"],
-          "time": _formatUpcomingDate(scheduledDate),
-          "scheduled_date": scheduledDate,
-          "duration": "$durationMinutes min",
-          "kcal": "$estimatedKcal kcal",
-          "completed": map["completed"] == true,
-        };
-      }).where((item) {
-        final date = item["scheduled_date"] as DateTime;
-        final completed = item["completed"] as bool? ?? false;
+      return {
+        "id": map["id"],
+        "saved_workout_id": map["saved_workout_id"],
+        "completed_session_id": map["completed_session_id"],
+        "title": map["workout_title"]?.toString() ?? "Entrenamiento",
+        "subtitle": map["day_name"]?.toString() ?? "Rutina",
+        "day_number": map["day_number"],
+        "day_name": map["day_name"],
+        "time": _formatUpcomingDate(scheduledDate),
+        "scheduled_date": scheduledDate,
+        "duration_minutes": durationMinutes,
+        "duration": "$durationMinutes min",
+        "kcal": "$estimatedKcal kcal",
+        "completed": map["completed"] == true,
+      };
+    }).toList();
 
-        return !completed &&
-            date.isAfter(now.subtract(const Duration(minutes: 1)));
-      }).toList();
+    final pendingWorkouts = allWorkouts.where((item) {
+      final completed = item["completed"] as bool? ?? false;
+      return !completed;
+    }).toList();
 
-      workouts.sort((a, b) {
-        final dateA = a["scheduled_date"] as DateTime;
-        final dateB = b["scheduled_date"] as DateTime;
-        return dateA.compareTo(dateB);
-      });
+    pendingWorkouts.sort((a, b) {
+      final dateA = a["scheduled_date"] as DateTime;
+      final dateB = b["scheduled_date"] as DateTime;
+      return dateA.compareTo(dateB);
+    });
 
-      if (!mounted) return;
+    final todayWorkouts = pendingWorkouts.where((item) {
+      final date = item["scheduled_date"] as DateTime;
+      return _isSameDay(date, now);
+    }).toList();
 
-      setState(() {
-        upcomingScheduledWorkouts = workouts.take(3).toList();
-        isLoadingScheduledWorkouts = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
+    final upcomingWorkouts = pendingWorkouts.where((item) {
+      final date = item["scheduled_date"] as DateTime;
 
-      setState(() {
-        upcomingScheduledWorkouts = [];
-        isLoadingScheduledWorkouts = false;
-      });
-    }
+      return date.isAfter(now.subtract(const Duration(minutes: 1)));
+    }).toList();
+
+    if (!mounted) return;
+
+    setState(() {
+      todayScheduledWorkout =
+          todayWorkouts.isNotEmpty ? todayWorkouts.first : null;
+      upcomingScheduledWorkouts = upcomingWorkouts.take(3).toList();
+      isLoadingScheduledWorkouts = false;
+    });
+  } catch (_) {
+    if (!mounted) return;
+
+    setState(() {
+      todayScheduledWorkout = null;
+      upcomingScheduledWorkouts = [];
+      isLoadingScheduledWorkouts = false;
+    });
   }
+}
 
   Future<void> _refreshWorkoutData() async {
     await Future.wait([
@@ -336,6 +382,62 @@ Future<void> _loadWorkoutStreak() async {
 
     await _refreshWorkoutData();
   }
+
+
+  Future<void> _openTodayScheduledWorkout() async {
+  final todayWorkout = todayScheduledWorkout;
+
+  if (todayWorkout == null) {
+    await _openActiveWorkout();
+    return;
+  }
+
+  final workout = activeWorkout;
+
+  if (workout == null) {
+    await _openSchedule();
+    return;
+  }
+
+  final activeWorkoutId = _parseInt(workout["id"]);
+  final scheduledSavedWorkoutId = _parseInt(todayWorkout["saved_workout_id"]);
+
+  if (activeWorkoutId == null ||
+      scheduledSavedWorkoutId == null ||
+      activeWorkoutId != scheduledSavedWorkoutId) {
+    await _openSchedule();
+    return;
+  }
+
+  final content = workout["content"];
+
+  if (content is! Map) {
+    await _openSchedule();
+    return;
+  }
+
+  final workoutContent = Map<String, dynamic>.from(content);
+  final dayNumber = _parseInt(todayWorkout["day_number"]);
+
+  final dayIndex = _findDayIndexByDayNumber(
+    workoutContent: workoutContent,
+    dayNumber: dayNumber,
+  );
+
+  await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => ActiveWorkoutDayView(
+        workout: workoutContent,
+        savedWorkoutId: activeWorkoutId,
+        scheduledWorkoutId: _parseInt(todayWorkout["id"]),
+        dayIndex: dayIndex,
+      ),
+    ),
+  );
+
+  await _refreshWorkoutData();
+}
 
   List<Map<String, dynamic>> _getActiveWorkoutDays() {
     final content = activeWorkout?["content"];
@@ -895,121 +997,153 @@ Widget _buildStatsShortcutCard() {
 }
 
   Widget _buildDailyScheduleCard() {
-    final hasActiveWorkout = activeWorkout != null;
+  final hasTodayScheduledWorkout = todayScheduledWorkout != null;
+  final hasActiveWorkout = activeWorkout != null;
 
-    final activeTitle = hasActiveWorkout
-        ? activeWorkout!["title"]?.toString() ?? "Rutina activa"
-        : "Plan de hoy";
+  final title = hasTodayScheduledWorkout
+      ? "Entrenamiento de hoy"
+      : hasActiveWorkout
+          ? "Rutina activa"
+          : "Plan de hoy";
 
-    final subtitle = isLoadingActiveWorkout
-        ? "Cargando rutina activa..."
-        : hasActiveWorkout
-            ? "${activeWorkout!["days_per_week"] ?? "-"} días/semana · ${activeWorkout!["duration_minutes"] ?? "-"} min"
-            : "No tienes ninguna rutina activa";
+  final mainText = hasTodayScheduledWorkout
+      ? todayScheduledWorkout!["title"]?.toString() ?? "Entrenamiento"
+      : hasActiveWorkout
+          ? activeWorkout!["title"]?.toString() ?? "Rutina activa"
+          : "No tienes ninguna rutina activa";
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            TColor.primaryColor2.withOpacity(0.22),
-            TColor.primaryColor1.withOpacity(0.10),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: TColor.primaryColor1.withOpacity(0.10),
-        ),
+  final subtitle = isLoadingActiveWorkout || isLoadingScheduledWorkouts
+      ? "Cargando plan de entrenamiento..."
+      : hasTodayScheduledWorkout
+          ? "${todayScheduledWorkout!["subtitle"] ?? "Rutina"} · ${todayScheduledWorkout!["time"] ?? "Hoy"} · ${todayScheduledWorkout!["duration"] ?? "-"}"
+          : hasActiveWorkout
+              ? "${activeWorkout!["days_per_week"] ?? "-"} días/semana · ${activeWorkout!["duration_minutes"] ?? "-"} min"
+              : "Elige o crea una rutina para empezar";
+
+  final icon = hasTodayScheduledWorkout
+      ? Icons.today_rounded
+      : hasActiveWorkout
+          ? Icons.check_circle_rounded
+          : Icons.calendar_month_rounded;
+
+  final iconColor = hasTodayScheduledWorkout
+      ? TColor.primaryColor1
+      : hasActiveWorkout
+          ? Colors.green
+          : TColor.primaryColor1;
+
+  final buttonText = hasTodayScheduledWorkout
+      ? "Empezar"
+      : hasActiveWorkout
+          ? "Ver"
+          : "Elegir";
+
+  final VoidCallback? buttonAction =
+      isLoadingActiveWorkout || isLoadingScheduledWorkouts
+          ? null
+          : hasTodayScheduledWorkout
+              ? _openTodayScheduledWorkout
+              : hasActiveWorkout
+                  ? _openActiveWorkout
+                  : _openSavedWorkouts;
+
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(18),
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [
+          TColor.primaryColor2.withOpacity(0.22),
+          TColor.primaryColor1.withOpacity(0.10),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: TColor.white,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Icon(
-              hasActiveWorkout
-                  ? Icons.check_circle_rounded
-                  : Icons.calendar_month_rounded,
-              color: hasActiveWorkout ? Colors.green : TColor.primaryColor1,
-              size: 28,
-            ),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(
+        color: TColor.primaryColor1.withOpacity(0.10),
+      ),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: TColor.white,
+            borderRadius: BorderRadius.circular(18),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  hasActiveWorkout ? "Rutina activa" : "Plan de hoy",
-                  style: TextStyle(
-                    color: TColor.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  activeTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: TColor.black,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: TColor.gray,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
+          child: Icon(
+            icon,
+            color: iconColor,
+            size: 28,
           ),
-          SizedBox(
-            height: 36,
-            child: ElevatedButton(
-              onPressed: isLoadingActiveWorkout
-                  ? null
-                  : hasActiveWorkout
-                      ? _openActiveWorkout
-                      : _openSavedWorkouts,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: TColor.primaryColor1,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: Colors.grey.shade300,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-              ),
-              child: Text(
-                hasActiveWorkout ? "Ver" : "Elegir",
-                style: const TextStyle(
-                  fontSize: 12,
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: TColor.black,
+                  fontSize: 16,
                   fontWeight: FontWeight.w800,
                 ),
               ),
+              const SizedBox(height: 4),
+              Text(
+                mainText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: TColor.black,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: TColor.gray,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 36,
+          child: ElevatedButton(
+            onPressed: buttonAction,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: TColor.primaryColor1,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: Colors.grey.shade300,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
+            child: Text(
+              buttonText,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildUpcomingScheduledWorkouts() {
     if (isLoadingScheduledWorkouts) {

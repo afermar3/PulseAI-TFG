@@ -288,7 +288,10 @@ bool _canApplyAction(Map<String, dynamic> action) {
 
   if (!requiresConfirmation) return false;
 
-  return type == "add_workout_day" || type == "add_exercise_to_day";
+  return type == "add_workout_day" ||
+      type == "add_exercise_to_day" ||
+      type == "replace_exercise" ||
+      type == "update_exercise_config";
 }
 
   @override
@@ -691,8 +694,48 @@ class _PendingActionCard extends StatelessWidget {
       }
     }
 
-    return action["description"]?.toString() ?? "Acción propuesta por PulseAI";
+    if (type == "replace_exercise" && payload is Map) {
+      final oldExercise = payload["old_exercise"]?.toString() ?? "Ejercicio actual";
+      final newExercise = payload["new_exercise"];
+
+      if (newExercise is Map) {
+        final newExerciseName =
+            newExercise["exercise_name"]?.toString() ?? "Nuevo ejercicio";
+
+        return "$oldExercise → $newExerciseName";
+      }
+
+      return action["description"]?.toString() ?? "Sustituir ejercicio";
+    }
+    if (type == "update_exercise_config" && payload is Map) {
+  final dayNumber = payload["day_number"]?.toString() ?? "-";
+  final dayName = payload["day_name"]?.toString() ?? "Día $dayNumber";
+  final exerciseName = payload["exercise_name"]?.toString() ?? "Ejercicio";
+  final updates = payload["updates"];
+
+  final parts = <String>[];
+
+  if (updates is Map) {
+    if (updates["sets"] != null) {
+      parts.add("${updates["sets"]} series");
+    }
+
+    if (updates["reps"] != null) {
+      parts.add("${updates["reps"]} reps");
+    }
+
+    if (updates["rest_seconds"] != null) {
+      parts.add("${updates["rest_seconds"]} s descanso");
+    }
   }
+
+  final updateText = parts.isEmpty ? "Actualizar configuración" : parts.join(" · ");
+
+  return "$exerciseName · Día $dayNumber - $dayName · $updateText";
+}
+
+        return action["description"]?.toString() ?? "Acción propuesta por PulseAI";
+      }
 
   @override
   Widget build(BuildContext context) {
