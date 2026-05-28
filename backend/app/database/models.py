@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database.database import Base
@@ -33,6 +33,19 @@ class User(Base):
         "SleepAlarm",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+
+    sleep_sessions = relationship(
+        "SleepSession",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    sleep_goal = relationship(
+    "SleepGoal",
+    back_populates="user",
+    uselist=False,
+    cascade="all, delete-orphan",
     )
 
     ai_chat_messages = relationship(
@@ -106,6 +119,57 @@ class SleepAlarm(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="sleep_alarms")
+
+
+class SleepSession(Base):
+    __tablename__ = "sleep_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    start_time = Column(DateTime, nullable=False, default=datetime.utcnow)
+    end_time = Column(DateTime, nullable=True)
+
+    duration_minutes = Column(Integer, nullable=True)
+
+    quality = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="sleep_sessions")
+
+
+class SleepGoal(Base):
+    __tablename__ = "sleep_goals"
+
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_sleep_goals_user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    bed_time = Column(String, nullable=False)   # formato HH:MM
+    wake_time = Column(String, nullable=False)  # formato HH:MM
+
+    target_minutes = Column(Integer, nullable=False)
+
+    repeat = Column(String, nullable=True, default="Todos los días")
+    enabled = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    user = relationship("User", back_populates="sleep_goal")
 
 
 class Exercise(Base):

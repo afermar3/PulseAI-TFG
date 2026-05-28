@@ -1,4 +1,4 @@
-import 'package:afermar3_tf_ipc/widgets/calendar_agenda/lib/calendar_agenda.dart';
+import 'package:afermar3_tf_ipc/services/sleep_goal_service.dart';
 import 'package:afermar3_tf_ipc/sleep_tracker/sleep_add_alarm.dart';
 import 'package:flutter/material.dart';
 import 'package:simple_animation_progress_bar/simple_animation_progress_bar.dart';
@@ -14,192 +14,313 @@ class SleepScheduleView extends StatefulWidget {
 }
 
 class _SleepScheduleViewState extends State<SleepScheduleView> {
-  final CalendarAgendaController _calendarAgendaControllerAppBar =
-      CalendarAgendaController();
+  bool _isLoading = true;
+  bool _isActionLoading = false;
+  String? _errorMessage;
 
-  late DateTime _selectedDateAppBBar;
-
-  List<Map<String, dynamic>> sleepArr = [
-    {
-      "id": 1,
-      "name": "Hora de dormir",
-      "image": "assets/img/bed.png",
-      "date_time": DateTime.now().copyWith(hour: 21, minute: 0),
-      "duration": "8h 30min",
-      "repeat": "Lun a Vie",
-      "vibrate": true,
-      "enabled": true,
-    },
-    {
-      "id": 2,
-      "name": "Alarma",
-      "image": "assets/img/alaarm.png",
-      "date_time": DateTime.now().add(const Duration(days: 1)).copyWith(
-            hour: 7,
-            minute: 0,
-          ),
-      "duration": "Despertar",
-      "repeat": "Lun a Vie",
-      "vibrate": true,
-      "enabled": true,
-    },
-  ];
-
-  List<Map<String, dynamic>> selectedDayAlarms = [];
+  Map<String, dynamic>? _sleepGoal;
 
   @override
   void initState() {
     super.initState();
-    _selectedDateAppBBar = DateTime.now();
-    _loadAlarmsForSelectedDay(refresh: false);
+    _loadSleepGoal();
   }
 
-  void _loadAlarmsForSelectedDay({bool refresh = true}) {
-    final selectedDate = DateTime(
-      _selectedDateAppBBar.year,
-      _selectedDateAppBBar.month,
-      _selectedDateAppBBar.day,
-    );
+  Future<void> _loadSleepGoal() async {
+    try {
+      final goal = await SleepGoalService.getMySleepGoal();
 
-    selectedDayAlarms = sleepArr.where((alarm) {
-      final alarmDate = alarm["date_time"];
+      if (!mounted) return;
 
-      if (alarmDate is! DateTime) return false;
+      setState(() {
+        _sleepGoal = goal;
+        _errorMessage = null;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
 
-      final alarmDay = DateTime(
-        alarmDate.year,
-        alarmDate.month,
-        alarmDate.day,
-      );
-
-      return alarmDay == selectedDate;
-    }).toList();
-
-    selectedDayAlarms.sort((a, b) {
-      final dateA = a["date_time"] as DateTime;
-      final dateB = b["date_time"] as DateTime;
-      return dateA.compareTo(dateB);
-    });
-
-    if (refresh && mounted) {
-      setState(() {});
+      setState(() {
+        _errorMessage = e.toString().replaceFirst("Exception: ", "");
+        _isLoading = false;
+      });
     }
   }
 
-  Future<void> _openAddAlarm() async {
-    final newAlarm = await Navigator.push(
+  Future<void> _openEditGoal() async {
+    final updated = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => SleepAddAlarmView(
-          date: _selectedDateAppBBar,
+          initialGoal: _sleepGoal,
         ),
       ),
     );
 
-    if (newAlarm == null) return;
+    if (updated == true) {
+      _loadSleepGoal();
+    }
+  }
 
-    if (newAlarm is Map) {
-      final alarm = Map<String, dynamic>.from(newAlarm);
+  Future<void> _toggleGoal() async {
+    if (_sleepGoal == null || _isActionLoading) return;
 
-      if (alarm["date_time"] is! DateTime) return;
+    setState(() {
+      _isActionLoading = true;
+    });
+
+    try {
+      final updatedGoal = await SleepGoalService.toggleSleepGoal();
+
+      if (!mounted) return;
 
       setState(() {
-        sleepArr.add(alarm);
-        _loadAlarmsForSelectedDay(refresh: false);
+        _sleepGoal = updatedGoal;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text("Alarma añadida"),
+          content: Text(
+            updatedGoal["enabled"] == true
+                ? "Objetivo de sueño activado"
+                : "Objetivo de sueño desactivado",
+          ),
           backgroundColor: TColor.rojo,
           behavior: SnackBarBehavior.floating,
         ),
       );
+    } catch (e) {
+      _showError(e.toString().replaceFirst("Exception: ", ""));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isActionLoading = false;
+        });
+      }
     }
   }
 
-  void _deleteAlarm(Map<String, dynamic> alarm) {
-    Navigator.pop(context);
+  Future<void> _deleteGoal() async {
+    if (_sleepGoal == null || _isActionLoading) return;
+
+    final confirmed = await _confirmDelete();
+
+    if (confirmed != true) return;
 
     setState(() {
-      sleepArr.removeWhere((item) => item["id"] == alarm["id"]);
-      _loadAlarmsForSelectedDay(refresh: false);
+      _isActionLoading = true;
     });
 
+    try {
+      await SleepGoalService.deleteSleepGoal();
+
+      if (!mounted) return;
+
+      setState(() {
+        _sleepGoal = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("Objetivo de sueño eliminado"),
+          backgroundColor: TColor.rojo,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      _showError(e.toString().replaceFirst("Exception: ", ""));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isActionLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<bool?> _confirmDelete() {
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 30),
+          decoration: BoxDecoration(
+            color: TColor.white,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(28),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: TColor.gray.withOpacity(0.25),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.redAccent,
+                  size: 42,
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  "Eliminar objetivo",
+                  style: TextStyle(
+                    color: TColor.black,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Se eliminará tu objetivo de descanso configurado. Podrás crear uno nuevo cuando quieras.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: TColor.gray,
+                    fontSize: 13,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context, true);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: const Text(
+                      "Eliminar",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(context, false);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: TColor.black,
+                      side: BorderSide(
+                        color: Colors.grey.shade200,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: const Text(
+                      "Cancelar",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Alarma eliminada"),
+      SnackBar(
+        content: Text(message),
         backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  void _toggleAlarm(Map<String, dynamic> alarm, bool value) {
-    setState(() {
-      final index = sleepArr.indexWhere((item) => item["id"] == alarm["id"]);
+  int _toInt(dynamic value) {
+    if (value == null) return 0;
 
-      if (index != -1) {
-        sleepArr[index]["enabled"] = value;
-      }
+    if (value is int) return value;
+    if (value is num) return value.toInt();
 
-      _loadAlarmsForSelectedDay(refresh: false);
-    });
+    return int.tryParse(value.toString()) ?? 0;
   }
 
-  void _openAlarmDetail(Map<String, dynamic> alarm) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) {
-        return _SleepAlarmBottomSheet(
-          alarm: alarm,
-          onDelete: () {
-            _deleteAlarm(alarm);
-          },
-          onToggle: (value) {
-            Navigator.pop(context);
-            _toggleAlarm(alarm, value);
-          },
-        );
-      },
-    );
-  }
+  String _formatDurationFromMinutes(dynamic value) {
+    final minutes = _toInt(value);
 
-  String _formatTime(DateTime date) {
-    final hour = date.hour.toString().padLeft(2, "0");
-    final minute = date.minute.toString().padLeft(2, "0");
-    return "$hour:$minute";
-  }
-
-  String _sleepSummary() {
-    if (selectedDayAlarms.isEmpty) {
-      return "No tienes alarmas programadas para este día";
+    if (minutes <= 0) {
+      return "--";
     }
 
-    final alarm = selectedDayAlarms.firstWhere(
-      (item) => item["duration"] != null,
-      orElse: () => selectedDayAlarms.first,
-    );
+    final hours = minutes ~/ 60;
+    final remainingMinutes = minutes % 60;
 
-    return alarm["duration"].toString();
+    if (hours <= 0) {
+      return "${remainingMinutes}min";
+    }
+
+    if (remainingMinutes == 0) {
+      return "${hours}h";
+    }
+
+    return "${hours}h ${remainingMinutes}min";
   }
 
   double _sleepRatio() {
-    final text = _sleepSummary();
+    final minutes = _toInt(_sleepGoal?["target_minutes"]);
 
-    final hourMatch = RegExp(r'(\d+)h').firstMatch(text);
-    final minMatch = RegExp(r'(\d+)min').firstMatch(text);
+    if (minutes <= 0) return 0.0;
 
-    final hours = int.tryParse(hourMatch?.group(1) ?? "0") ?? 0;
-    final minutes = int.tryParse(minMatch?.group(1) ?? "0") ?? 0;
+    return (minutes / 480).clamp(0.0, 1.0);
+  }
 
-    final totalMinutes = (hours * 60) + minutes;
+  String _goalStatusText() {
+    if (_sleepGoal == null) {
+      return "Sin objetivo configurado";
+    }
 
-    if (totalMinutes == 0) return 0.0;
+    final enabled = _sleepGoal?["enabled"] == true;
 
-    return (totalMinutes / 510).clamp(0.0, 1.0);
+    return enabled ? "Objetivo activo" : "Objetivo desactivado";
+  }
+
+  String _bedTimeText() {
+    return _sleepGoal?["bed_time"]?.toString() ?? "--:--";
+  }
+
+  String _wakeTimeText() {
+    return _sleepGoal?["wake_time"]?.toString() ?? "--:--";
+  }
+
+  String _repeatText() {
+    return _sleepGoal?["repeat"]?.toString() ?? "Sin repetición";
+  }
+
+  String _durationText() {
+    return _formatDurationFromMinutes(_sleepGoal?["target_minutes"]);
   }
 
   @override
@@ -207,6 +328,7 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
     final media = MediaQuery.of(context).size;
 
     return Scaffold(
+      backgroundColor: TColor.white,
       appBar: AppBar(
         backgroundColor: TColor.white,
         centerTitle: true,
@@ -234,7 +356,7 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
           ),
         ),
         title: Text(
-          "Horario de sueño",
+          "Objetivo de sueño",
           style: TextStyle(
             color: TColor.black,
             fontSize: 18,
@@ -244,7 +366,7 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
         actions: [
           InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: () {},
+            onTap: _loadSleepGoal,
             child: Container(
               margin: const EdgeInsets.all(8),
               height: 40,
@@ -254,184 +376,193 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
                 color: TColor.lightGray,
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Image.asset(
-                "assets/img/more_btn.png",
-                width: 15,
-                height: 15,
-                fit: BoxFit.contain,
+              child: Icon(
+                Icons.refresh_rounded,
+                color: TColor.black,
+                size: 22,
               ),
             ),
           ),
         ],
       ),
-      backgroundColor: TColor.white,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: 100),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _SleepHeaderCard(
-              media: media,
-              title: "Objetivo de descanso",
-              duration: "8h 30min",
-            ),
-            const SizedBox(height: 18),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                "Tu horario",
-                style: TextStyle(
-                  color: TColor.black,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
+      body: SafeArea(
+        child: _isLoading
+            ? Center(
+                child: CircularProgressIndicator(
+                  color: TColor.rojo,
+                ),
+              )
+            : RefreshIndicator(
+                color: TColor.rojo,
+                onRefresh: _loadSleepGoal,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_errorMessage != null) ...[
+                        _ErrorGoalCard(
+                          message: _errorMessage!,
+                          onRetry: _loadSleepGoal,
+                        ),
+                        const SizedBox(height: 18),
+                      ],
+                      _SleepHeaderCard(
+                        media: media,
+                        title: "Objetivo de descanso",
+                        duration: _sleepGoal == null
+                            ? "No configurado"
+                            : _durationText(),
+                        subtitle: _goalStatusText(),
+                      ),
+                      const SizedBox(height: 22),
+                      Text(
+                        "Configuración",
+                        style: TextStyle(
+                          color: TColor.black,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_sleepGoal == null)
+                        _EmptyGoalCard(
+                          onCreate: _openEditGoal,
+                        )
+                      else ...[
+                        _GoalInfoCard(
+                          icon: Icons.bedtime_rounded,
+                          title: "Hora objetivo de dormir",
+                          value: _bedTimeText(),
+                        ),
+                        const SizedBox(height: 12),
+                        _GoalInfoCard(
+                          icon: Icons.wb_sunny_rounded,
+                          title: "Hora objetivo de despertar",
+                          value: _wakeTimeText(),
+                        ),
+                        const SizedBox(height: 12),
+                        _GoalInfoCard(
+                          icon: Icons.timer_rounded,
+                          title: "Duración objetivo",
+                          value: _durationText(),
+                        ),
+                        const SizedBox(height: 12),
+                        _GoalInfoCard(
+                          icon: Icons.repeat_rounded,
+                          title: "Repetición",
+                          value: _repeatText(),
+                        ),
+                        const SizedBox(height: 18),
+                        _GoalProgressCard(
+                          media: media,
+                          summary: _durationText(),
+                          ratio: _sleepRatio(),
+                        ),
+                        const SizedBox(height: 22),
+                        _buildActionButtons(),
+                      ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 10),
-            CalendarAgenda(
-              controller: _calendarAgendaControllerAppBar,
-              appbar: false,
-              selectedDayPosition: SelectedDayPosition.center,
-              leading: IconButton(
-                onPressed: () {},
-                icon: Image.asset(
-                  "assets/img/ArrowLeft.png",
-                  width: 15,
-                  height: 15,
-                ),
-              ),
-              training: IconButton(
-                onPressed: () {},
-                icon: Image.asset(
-                  "assets/img/ArrowRight.png",
-                  width: 15,
-                  height: 15,
-                ),
-              ),
-              weekDay: WeekDay.short,
-              dayNameFontSize: 12,
-              dayNumberFontSize: 16,
-              dayBGColor: Colors.grey.withOpacity(0.15),
-              titleSpaceBetween: 15,
-              backgroundColor: Colors.transparent,
-              fullCalendarScroll: FullCalendarScroll.horizontal,
-              fullCalendarDay: WeekDay.short,
-              selectedDateColor: Colors.white,
-              dateColor: Colors.black,
-              locale: 'es',
-              initialDate: DateTime.now(),
-              calendarEventColor: TColor.primaryColor2,
-              firstDate: DateTime.now().subtract(const Duration(days: 140)),
-              lastDate: DateTime.now().add(const Duration(days: 60)),
-              events: sleepArr
-                  .where((alarm) => alarm["date_time"] is DateTime)
-                  .map((alarm) => alarm["date_time"] as DateTime)
-                  .toList(),
-              onDateSelected: (date) {
-                setState(() {
-                  _selectedDateAppBBar = date;
-                  _loadAlarmsForSelectedDay(refresh: false);
-                });
-              },
-              selectedDayLogo: Container(
-                width: double.maxFinite,
-                height: double.maxFinite,
+      ),
+      floatingActionButton: _sleepGoal == null
+          ? InkWell(
+              borderRadius: BorderRadius.circular(28),
+              onTap: _openEditGoal,
+              child: Container(
+                width: 58,
+                height: 58,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: TColor.primaryG,
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  borderRadius: BorderRadius.circular(10.0),
+                  gradient: LinearGradient(colors: TColor.primaryG),
+                  borderRadius: BorderRadius.circular(29),
+                  boxShadow: [
+                    BoxShadow(
+                      color: TColor.rojo.withOpacity(0.35),
+                      blurRadius: 16,
+                      offset: const Offset(0, 7),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.add_rounded,
+                  size: 28,
+                  color: TColor.white,
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      "${selectedDayAlarms.length} alarmas",
-                      style: TextStyle(
-                        color: TColor.black,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _openAddAlarm,
-                    child: Text(
-                      "Añadir",
-                      style: TextStyle(
-                        color: TColor.rojo,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            selectedDayAlarms.isEmpty
-                ? _EmptySleepView(
-                    onAdd: _openAddAlarm,
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    physics: const NeverScrollableScrollPhysics(),
-                    shrinkWrap: true,
-                    itemCount: selectedDayAlarms.length,
-                    itemBuilder: (context, index) {
-                      final alarm = selectedDayAlarms[index];
+            )
+          : null,
+    );
+  }
 
-                      return _SleepAlarmCard(
-                        alarm: alarm,
-                        time: _formatTime(alarm["date_time"] as DateTime),
-                        onTap: () {
-                          _openAlarmDetail(alarm);
-                        },
-                        onToggle: (value) {
-                          _toggleAlarm(alarm, value);
-                        },
-                      );
-                    },
-                  ),
-            _SleepProgressCard(
-              media: media,
-              summary: _sleepSummary(),
-              ratio: _sleepRatio(),
+  Widget _buildActionButtons() {
+    final enabled = _sleepGoal?["enabled"] == true;
+
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: RoundButton(
+            title: "Editar objetivo",
+            onPressed: _openEditGoal,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: _isActionLoading ? null : _toggleGoal,
+            icon: Icon(
+              enabled
+                  ? Icons.pause_circle_outline_rounded
+                  : Icons.play_circle_outline_rounded,
             ),
-          ],
-        ),
-      ),
-      floatingActionButton: InkWell(
-        borderRadius: BorderRadius.circular(28),
-        onTap: _openAddAlarm,
-        child: Container(
-          width: 58,
-          height: 58,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: TColor.primaryG),
-            borderRadius: BorderRadius.circular(29),
-            boxShadow: [
-              BoxShadow(
-                color: TColor.rojo.withOpacity(0.35),
-                blurRadius: 16,
-                offset: const Offset(0, 7),
+            label: Text(
+              enabled ? "Desactivar objetivo" : "Activar objetivo",
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: enabled ? TColor.rojo : Colors.green,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
               ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            Icons.add_rounded,
-            size: 28,
-            color: TColor.white,
+              textStyle: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
         ),
-      ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: OutlinedButton.icon(
+            onPressed: _isActionLoading ? null : _deleteGoal,
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text("Eliminar objetivo"),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.redAccent,
+              side: const BorderSide(
+                color: Colors.redAccent,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              textStyle: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -440,18 +571,19 @@ class _SleepHeaderCard extends StatelessWidget {
   final Size media;
   final String title;
   final String duration;
+  final String subtitle;
 
   const _SleepHeaderCard({
     required this.media,
     required this.title,
     required this.duration,
+    required this.subtitle,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.maxFinite,
-      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
       padding: const EdgeInsets.all(20),
       height: media.width * 0.42,
       decoration: BoxDecoration(
@@ -469,7 +601,7 @@ class _SleepHeaderCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 12),
+                const Spacer(),
                 Text(
                   title,
                   style: TextStyle(
@@ -483,20 +615,20 @@ class _SleepHeaderCard extends StatelessWidget {
                   duration,
                   style: TextStyle(
                     color: TColor.rojo,
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const Spacer(),
-                SizedBox(
-                  width: 112,
-                  height: 35,
-                  child: RoundButton(
-                    title: "Ver consejos",
+                const SizedBox(height: 5),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: TColor.gray,
                     fontSize: 12,
-                    onPressed: () {},
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+                const Spacer(),
               ],
             ),
           ),
@@ -510,359 +642,85 @@ class _SleepHeaderCard extends StatelessWidget {
   }
 }
 
-class _SleepAlarmCard extends StatelessWidget {
-  final Map<String, dynamic> alarm;
-  final String time;
-  final VoidCallback onTap;
-  final Function(bool value) onToggle;
-
-  const _SleepAlarmCard({
-    required this.alarm,
-    required this.time,
-    required this.onTap,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = alarm["enabled"] as bool? ?? true;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(24),
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 14),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: TColor.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: Colors.grey.shade100,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.045),
-              blurRadius: 14,
-              offset: const Offset(0, 7),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 58,
-              height: 58,
-              decoration: BoxDecoration(
-                color: enabled
-                    ? TColor.rojo.withOpacity(0.10)
-                    : Colors.grey.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Image.asset(
-                alarm["image"].toString(),
-                width: 30,
-                height: 30,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    alarm["name"].toString(),
-                    style: TextStyle(
-                      color: enabled ? TColor.black : TColor.gray,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "${alarm["repeat"]} · ${alarm["duration"]}",
-                    style: TextStyle(
-                      color: TColor.gray,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.access_time_rounded,
-                        color: TColor.rojo,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        time,
-                        style: TextStyle(
-                          color: TColor.rojo,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Transform.scale(
-              scale: 0.75,
-              child: Switch(
-                value: enabled,
-                activeColor: TColor.white,
-                activeTrackColor: TColor.rojo,
-                inactiveThumbColor: TColor.white,
-                inactiveTrackColor: Colors.grey.shade300,
-                onChanged: onToggle,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SleepAlarmBottomSheet extends StatelessWidget {
-  final Map<String, dynamic> alarm;
-  final VoidCallback onDelete;
-  final Function(bool value) onToggle;
-
-  const _SleepAlarmBottomSheet({
-    required this.alarm,
-    required this.onDelete,
-    required this.onToggle,
-  });
-
-  String _formatTime(DateTime date) {
-    final hour = date.hour.toString().padLeft(2, "0");
-    final minute = date.minute.toString().padLeft(2, "0");
-
-    return "$hour:$minute";
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final dateTime = alarm["date_time"] as DateTime;
-    final enabled = alarm["enabled"] as bool? ?? true;
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
-      decoration: BoxDecoration(
-        color: TColor.white,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(28),
-          topRight: Radius.circular(28),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 46,
-              height: 5,
-              decoration: BoxDecoration(
-                color: TColor.gray.withOpacity(0.25),
-                borderRadius: BorderRadius.circular(20),
-              ),
-            ),
-            const SizedBox(height: 22),
-            Row(
-              children: [
-                Container(
-                  width: 58,
-                  height: 58,
-                  decoration: BoxDecoration(
-                    color: TColor.rojo.withOpacity(0.10),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Image.asset(
-                    alarm["image"].toString(),
-                    width: 30,
-                    height: 30,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        alarm["name"].toString(),
-                        style: TextStyle(
-                          color: TColor.black,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        alarm["repeat"].toString(),
-                        style: TextStyle(
-                          color: TColor.gray,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: TColor.gray,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 22),
-            Row(
-              children: [
-                Expanded(
-                  child: _SleepInfoBox(
-                    icon: Icons.access_time_rounded,
-                    value: _formatTime(dateTime),
-                    label: "Hora",
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _SleepInfoBox(
-                    icon: Icons.bedtime_rounded,
-                    value: alarm["duration"].toString(),
-                    label: "Sueño",
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _SleepInfoBox(
-                    icon: Icons.vibration_rounded,
-                    value: (alarm["vibrate"] as bool? ?? false) ? "Sí" : "No",
-                    label: "Vibración",
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                onPressed: () {
-                  onToggle(!enabled);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: enabled ? TColor.rojo : Colors.green,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-                child: Text(
-                  enabled ? "Desactivar alarma" : "Activar alarma",
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: OutlinedButton.icon(
-                onPressed: onDelete,
-                icon: const Icon(Icons.delete_outline_rounded),
-                label: const Text("Eliminar alarma"),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.redAccent,
-                  side: const BorderSide(color: Colors.redAccent),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SleepInfoBox extends StatelessWidget {
+class _GoalInfoCard extends StatelessWidget {
   final IconData icon;
+  final String title;
   final String value;
-  final String label;
 
-  const _SleepInfoBox({
+  const _GoalInfoCard({
     required this.icon,
+    required this.title,
     required this.value,
-    required this.label,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 86,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.grey.shade100,
-        ),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(),
+      child: Row(
         children: [
-          Icon(
-            icon,
-            color: TColor.rojo,
-            size: 22,
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: TColor.rojo.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              icon,
+              color: TColor.rojo,
+              size: 24,
+            ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: TColor.black,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
           Text(
             value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: TColor.black,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: TColor.gray,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
+              color: TColor.rojo,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
             ),
           ),
         ],
       ),
     );
   }
+
+  BoxDecoration _cardDecoration() {
+    return BoxDecoration(
+      color: TColor.white,
+      borderRadius: BorderRadius.circular(22),
+      border: Border.all(
+        color: Colors.grey.shade100,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.045),
+          blurRadius: 14,
+          offset: const Offset(0, 7),
+        ),
+      ],
+    );
+  }
 }
 
-class _SleepProgressCard extends StatelessWidget {
+class _GoalProgressCard extends StatelessWidget {
   final Size media;
   final String summary;
   final double ratio;
 
-  const _SleepProgressCard({
+  const _GoalProgressCard({
     required this.media,
     required this.summary,
     required this.ratio,
@@ -874,7 +732,6 @@ class _SleepProgressCard extends StatelessWidget {
 
     return Container(
       width: double.maxFinite,
-      margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: TColor.rojo.withOpacity(0.08),
@@ -884,11 +741,20 @@ class _SleepProgressCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            summary,
+            "Comparado con el objetivo recomendado de 8h",
             style: TextStyle(
               color: TColor.black,
               fontSize: 13,
               fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            summary,
+            style: TextStyle(
+              color: TColor.gray,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 15),
@@ -927,17 +793,32 @@ class _SleepProgressCard extends StatelessWidget {
   }
 }
 
-class _EmptySleepView extends StatelessWidget {
-  final VoidCallback onAdd;
+class _EmptyGoalCard extends StatelessWidget {
+  final VoidCallback onCreate;
 
-  const _EmptySleepView({
-    required this.onAdd,
+  const _EmptyGoalCard({
+    required this.onCreate,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 20, 22, 10),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+      decoration: BoxDecoration(
+        color: TColor.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.045),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
       child: Column(
         children: [
           Container(
@@ -955,7 +836,7 @@ class _EmptySleepView extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
-            "No hay alarmas",
+            "Sin objetivo de sueño",
             style: TextStyle(
               color: TColor.black,
               fontSize: 18,
@@ -964,7 +845,7 @@ class _EmptySleepView extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            "Todavía no tienes alarmas de sueño programadas para este día.",
+            "Configura una hora objetivo para dormir y despertar. No es una alarma, solo una referencia para comparar tu descanso real.",
             textAlign: TextAlign.center,
             style: TextStyle(
               color: TColor.gray,
@@ -977,9 +858,9 @@ class _EmptySleepView extends StatelessWidget {
           SizedBox(
             height: 48,
             child: ElevatedButton.icon(
-              onPressed: onAdd,
+              onPressed: onCreate,
               icon: const Icon(Icons.add_rounded),
-              label: const Text("Añadir alarma"),
+              label: const Text("Configurar objetivo"),
               style: ElevatedButton.styleFrom(
                 backgroundColor: TColor.rojo,
                 foregroundColor: Colors.white,
@@ -990,6 +871,60 @@ class _EmptySleepView extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorGoalCard extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorGoalCard({
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.redAccent.withOpacity(0.16),
+        ),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Colors.redAccent,
+            size: 32,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.redAccent,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton(
+            onPressed: onRetry,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            child: const Text("Reintentar"),
           ),
         ],
       ),

@@ -1,16 +1,16 @@
+import 'package:afermar3_tf_ipc/services/sleep_goal_service.dart';
 import 'package:flutter/material.dart';
 
 import '../../widgets/color_extension.dart';
-import '../../widgets/common.dart';
 import '../../common_widget/icon_title_next_row.dart';
 import '../../common_widget/round_button.dart';
 
 class SleepAddAlarmView extends StatefulWidget {
-  final DateTime date;
+  final Map<String, dynamic>? initialGoal;
 
   const SleepAddAlarmView({
     super.key,
-    required this.date,
+    this.initialGoal,
   });
 
   @override
@@ -19,39 +19,76 @@ class SleepAddAlarmView extends StatefulWidget {
 
 class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
   late TimeOfDay bedtime;
-  late TimeOfDay alarmTime;
+  late TimeOfDay wakeTime;
 
-  bool vibrate = true;
   bool enabled = true;
-  String repeatText = "Lun a Vie";
+  String repeatText = "Todos los días";
+
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
 
-    bedtime = const TimeOfDay(hour: 22, minute: 30);
-    alarmTime = const TimeOfDay(hour: 7, minute: 0);
+    bedtime = _parseTimeOfDay(
+      widget.initialGoal?["bed_time"],
+      fallback: const TimeOfDay(hour: 23, minute: 30),
+    );
+
+    wakeTime = _parseTimeOfDay(
+      widget.initialGoal?["wake_time"],
+      fallback: const TimeOfDay(hour: 7, minute: 30),
+    );
+
+    repeatText =
+        widget.initialGoal?["repeat"]?.toString() ?? "Todos los días";
+
+    enabled = widget.initialGoal?["enabled"] as bool? ?? true;
+  }
+
+  TimeOfDay _parseTimeOfDay(
+    dynamic value, {
+    required TimeOfDay fallback,
+  }) {
+    if (value == null) return fallback;
+
+    final parts = value.toString().split(":");
+
+    if (parts.length != 2) return fallback;
+
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+
+    if (hour == null || minute == null) return fallback;
+    if (hour < 0 || hour > 23) return fallback;
+    if (minute < 0 || minute > 59) return fallback;
+
+    return TimeOfDay(hour: hour, minute: minute);
   }
 
   String _formatTime(TimeOfDay time) {
     final hour = time.hour.toString().padLeft(2, "0");
     final minute = time.minute.toString().padLeft(2, "0");
+
     return "$hour:$minute";
   }
 
-  DateTime _buildDateTime(TimeOfDay time) {
-    return DateTime(
-      widget.date.year,
-      widget.date.month,
-      widget.date.day,
-      time.hour,
-      time.minute,
-    );
-  }
-
   Duration _calculateSleepDuration() {
-    DateTime bedDate = _buildDateTime(bedtime);
-    DateTime wakeDate = _buildDateTime(alarmTime);
+    DateTime bedDate = DateTime(
+      2026,
+      1,
+      1,
+      bedtime.hour,
+      bedtime.minute,
+    );
+
+    DateTime wakeDate = DateTime(
+      2026,
+      1,
+      1,
+      wakeTime.hour,
+      wakeTime.minute,
+    );
 
     if (wakeDate.isBefore(bedDate) || wakeDate.isAtSameMomentAs(bedDate)) {
       wakeDate = wakeDate.add(const Duration(days: 1));
@@ -60,10 +97,22 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
     return wakeDate.difference(bedDate);
   }
 
+  int _targetMinutes() {
+    return _calculateSleepDuration().inMinutes;
+  }
+
   String _sleepDurationText() {
     final duration = _calculateSleepDuration();
     final hours = duration.inHours;
     final minutes = duration.inMinutes % 60;
+
+    if (hours <= 0) {
+      return "${minutes}min";
+    }
+
+    if (minutes == 0) {
+      return "${hours}h";
+    }
 
     return "${hours}h ${minutes}min";
   }
@@ -107,10 +156,10 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
 
   void _showRepeatPicker() {
     final options = [
-      "Una vez",
       "Todos los días",
       "Lun a Vie",
       "Fines de semana",
+      "Una vez",
     ];
 
     showModalBottomSheet(
@@ -121,9 +170,8 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
           padding: const EdgeInsets.fromLTRB(22, 16, 22, 22),
           decoration: BoxDecoration(
             color: TColor.white,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(28),
-              topRight: Radius.circular(28),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(28),
             ),
           ),
           child: SafeArea(
@@ -144,7 +192,7 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
                   children: [
                     Expanded(
                       child: Text(
-                        "Repetir alarma",
+                        "Repetir objetivo",
                         style: TextStyle(
                           color: TColor.black,
                           fontSize: 18,
@@ -223,24 +271,56 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
     );
   }
 
-  void _saveAlarm() {
-    final newAlarm = {
-      "id": DateTime.now().millisecondsSinceEpoch,
-      "name": "Alarma",
-      "image": "assets/img/alaarm.png",
-      "date_time": _buildDateTime(alarmTime),
-      "bed_time": _buildDateTime(bedtime),
-      "duration": _sleepDurationText(),
-      "repeat": repeatText,
-      "vibrate": vibrate,
-      "enabled": enabled,
-    };
+  Future<void> _saveGoal() async {
+    if (_isSaving) return;
 
-    Navigator.pop(context, newAlarm);
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      await SleepGoalService.saveSleepGoal(
+        bedTime: _formatTime(bedtime),
+        wakeTime: _formatTime(wakeTime),
+        targetMinutes: _targetMinutes(),
+        repeat: repeatText,
+        enabled: enabled,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("Objetivo de sueño guardado"),
+          backgroundColor: TColor.rojo,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst("Exception: ", "")),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isEditing = widget.initialGoal != null;
+
     return Scaffold(
       backgroundColor: TColor.white,
       appBar: AppBar(
@@ -270,35 +350,13 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
           ),
         ),
         title: Text(
-          "Añadir alarma",
+          isEditing ? "Editar objetivo" : "Configurar objetivo",
           style: TextStyle(
             color: TColor.black,
             fontSize: 17,
             fontWeight: FontWeight.w800,
           ),
         ),
-        actions: [
-          InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () {},
-            child: Container(
-              margin: const EdgeInsets.all(8),
-              height: 40,
-              width: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: TColor.lightGray,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Image.asset(
-                "assets/img/more_btn.png",
-                width: 15,
-                height: 15,
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
-        ],
       ),
       body: SafeArea(
         child: Column(
@@ -310,15 +368,13 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _HeaderSleepCard(
-                      dateText: dateToString(
-                        widget.date,
-                        formatStr: "E, dd MMMM yyyy",
-                      ),
                       durationText: _sleepDurationText(),
+                      subtitle:
+                          "No es una alarma. Es una referencia para comparar tu descanso real.",
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      "Horario",
+                      "Horario objetivo",
                       style: TextStyle(
                         color: TColor.black,
                         fontSize: 18,
@@ -328,7 +384,7 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
                     const SizedBox(height: 12),
                     IconTitleNextRow(
                       icon: "assets/img/Bed_Add.png",
-                      title: "Hora de dormir",
+                      title: "Hora objetivo para dormir",
                       time: _formatTime(bedtime),
                       color: TColor.lightGray,
                       onPressed: () {
@@ -343,14 +399,14 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
                     const SizedBox(height: 10),
                     IconTitleNextRow(
                       icon: "assets/img/alaarm.png",
-                      title: "Hora de despertar",
-                      time: _formatTime(alarmTime),
+                      title: "Hora objetivo para despertar",
+                      time: _formatTime(wakeTime),
                       color: TColor.lightGray,
                       onPressed: () {
                         _selectTime(
-                          initialTime: alarmTime,
+                          initialTime: wakeTime,
                           onSelected: (value) {
-                            alarmTime = value;
+                            wakeTime = value;
                           },
                         );
                       },
@@ -358,7 +414,7 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
                     const SizedBox(height: 10),
                     IconTitleNextRow(
                       icon: "assets/img/HoursTime.png",
-                      title: "Horas de sueño",
+                      title: "Objetivo calculado",
                       time: _sleepDurationText(),
                       color: TColor.lightGray,
                       onPressed: () {},
@@ -366,14 +422,14 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
                     const SizedBox(height: 10),
                     IconTitleNextRow(
                       icon: "assets/img/Repeat.png",
-                      title: "Repetir",
+                      title: "Repetición",
                       time: repeatText,
                       color: TColor.lightGray,
                       onPressed: _showRepeatPicker,
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      "Opciones",
+                      "Estado",
                       style: TextStyle(
                         color: TColor.black,
                         fontSize: 18,
@@ -382,21 +438,10 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
                     ),
                     const SizedBox(height: 12),
                     _SwitchOptionCard(
-                      icon: "assets/img/Vibrate.png",
-                      title: "Vibrar al sonar",
-                      subtitle: "El móvil vibrará junto con la alarma",
-                      value: vibrate,
-                      onChanged: (value) {
-                        setState(() {
-                          vibrate = value;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    _SwitchOptionCard(
                       icon: "assets/img/alaarm.png",
-                      title: "Alarma activa",
-                      subtitle: "La alarma aparecerá activa en tu horario",
+                      title: "Objetivo activo",
+                      subtitle:
+                          "Si está activo, se usará para comparar tu sueño real.",
                       value: enabled,
                       onChanged: (value) {
                         setState(() {
@@ -420,9 +465,16 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
                   ),
                 ],
               ),
-              child: RoundButton(
-                title: "Añadir alarma",
-                onPressed: _saveAlarm,
+              child: SizedBox(
+                height: 52,
+                child: RoundButton(
+                  title: _isSaving
+                      ? "Guardando..."
+                      : isEditing
+                          ? "Guardar cambios"
+                          : "Guardar objetivo",
+                  onPressed: _isSaving ? () {} : _saveGoal,
+                ),
               ),
             ),
           ],
@@ -433,12 +485,12 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
 }
 
 class _HeaderSleepCard extends StatelessWidget {
-  final String dateText;
   final String durationText;
+  final String subtitle;
 
   const _HeaderSleepCard({
-    required this.dateText,
     required this.durationText,
+    required this.subtitle,
   });
 
   @override
@@ -465,7 +517,7 @@ class _HeaderSleepCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(18),
             ),
             child: Icon(
-              Icons.bedtime_rounded,
+              Icons.flag_rounded,
               color: TColor.rojo,
               size: 30,
             ),
@@ -476,7 +528,7 @@ class _HeaderSleepCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  dateText,
+                  "Objetivo de descanso",
                   style: TextStyle(
                     color: TColor.black,
                     fontSize: 14,
@@ -487,9 +539,19 @@ class _HeaderSleepCard extends StatelessWidget {
                 Text(
                   durationText,
                   style: TextStyle(
+                    color: TColor.rojo,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
                     color: TColor.gray,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                    height: 1.25,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
