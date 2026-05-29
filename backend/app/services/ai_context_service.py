@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.database.models import (
     SavedWorkout,
     ScheduledWorkout,
+    SleepGoalProfile,
+    SleepSession,
     User,
     WorkoutSession,
 )
@@ -47,6 +49,22 @@ def _parse_int(value, fallback: int = 0) -> int:
         return int(value)
     except Exception:
         return fallback
+
+
+def _format_minutes(minutes: Optional[int]) -> str:
+    if minutes is None or minutes <= 0:
+        return "No especificado"
+
+    hours = minutes // 60
+    remaining_minutes = minutes % 60
+
+    if hours <= 0:
+        return f"{remaining_minutes}min"
+
+    if remaining_minutes == 0:
+        return f"{hours}h"
+
+    return f"{hours}h {remaining_minutes}min"
 
 
 def _get_current_week_range():
@@ -260,6 +278,162 @@ Próximos entrenamientos programados:
     return "\n".join(lines)
 
 
+def _sleep_goal_type_label(goal_type: str) -> str:
+    if goal_type == "ALL_DAYS":
+        return "Todos los días"
+
+    if goal_type == "WEEKDAYS":
+        return "Entre semana"
+
+    if goal_type == "WEEKENDS":
+        return "Fin de semana"
+
+    return goal_type
+
+
+def _get_effective_sleep_goal(
+    sleep_goals: List[SleepGoalProfile],
+) -> tuple[str, Optional[SleepGoalProfile]]:
+    today = datetime.utcnow().date()
+    weekday = today.weekday()
+
+    preferred_type = "WEEKENDS" if weekday >= 5 else "WEEKDAYS"
+
+    preferred_goal = next(
+        (
+            goal
+            for goal in sleep_goals
+            if goal.goal_type == preferred_type and goal.enabled is True
+        ),
+        None,
+    )
+
+    if preferred_goal is not None:
+        return preferred_type, preferred_goal
+
+    all_days_goal = next(
+        (
+            goal
+            for goal in sleep_goals
+            if goal.goal_type == "ALL_DAYS" and goal.enabled is True
+        ),
+        None,
+    )
+
+    if all_days_goal is not None:
+        return "ALL_DAYS", all_days_goal
+
+    return "RECOMMENDED", None
+
+
+def _format_sleep_goal(goal: SleepGoalProfile) -> str:
+    status = "activo" if goal.enabled else "desactivado"
+
+    return (
+        f"- {_sleep_goal_type_label(goal.goal_type)}: "
+        f"{goal.bed_time} - {goal.wake_time} / "
+        f"{_format_minutes(goal.target_minutes)} / {status}"
+    )
+
+
+def _format_sleep_session(session: SleepSession) -> str:
+    start_time = (
+        session.start_time.strftime("%Y-%m-%d %H:%M")
+        if session.start_time
+        else "Sin inicio"
+    )
+
+    end_time = (
+        session.end_time.strftime("%Y-%m-%d %H:%M")
+        if session.end_time
+        else "Sin fin"
+    )
+
+    duration = _format_minutes(session.duration_minutes)
+    quality = _safe_value(session.quality, "No indicada")
+
+    return (
+        f"- {start_time} → {end_time} / "
+        f"Duración: {duration} / Calidad: {quality}"
+    )
+
+
+def _format_sleep_context(
+    active_sleep_session: Optional[SleepSession],
+    latest_sleep_session: Optional[SleepSession],
+    recent_sleep_sessions: List[SleepSession],
+    sleep_goals: List[SleepGoalProfile],
+) -> str:
+    source, effective_goal = _get_effective_sleep_goal(sleep_goals)
+
+    lines = [
+        "Sueño y descanso:",
+    ]
+
+    if active_sleep_session is None:
+        lines.append("- Sueño activo: No hay una sesión de sueño activa.")
+    else:
+        start_time = (
+            active_sleep_session.start_time.strftime("%Y-%m-%d %H:%M")
+            if active_sleep_session.start_time
+            else "Sin inicio"
+        )
+
+        lines.append(f"- Sueño activo: Sí, iniciado en {start_time}.")
+
+    if latest_sleep_session is None:
+        lines.append("- Último sueño registrado: No hay registros completados.")
+    else:
+        lines.append("- Último sueño registrado:")
+        lines.append(f"  {_format_sleep_session(latest_sleep_session)}")
+
+    if effective_goal is None:
+        lines.append("- Objetivo efectivo de hoy: Recomendado / 8h.")
+    else:
+        lines.append(
+            "- Objetivo efectivo de hoy: "
+            f"{_sleep_goal_type_label(source)} / "
+            f"{effective_goal.bed_time} - {effective_goal.wake_time} / "
+            f"{_format_minutes(effective_goal.target_minutes)}."
+        )
+
+    if not sleep_goals:
+        lines.append("- Objetivos configurados: No hay objetivos personalizados.")
+    else:
+        lines.append("- Objetivos configurados:")
+
+        ordered_types = ["WEEKDAYS", "WEEKENDS", "ALL_DAYS"]
+
+        for goal_type in ordered_types:
+            goal = next(
+                (
+                    item
+                    for item in sleep_goals
+                    if item.goal_type == goal_type
+                ),
+                None,
+            )
+
+            if goal is not None:
+                lines.append(f"  {_format_sleep_goal(goal)}")
+
+    completed_recent = [
+        session
+        for session in recent_sleep_sessions
+        if session.is_active is False
+    ]
+
+    if not completed_recent:
+        lines.append("- Historial reciente de sueño: No hay registros recientes.")
+    else:
+        lines.append("- Historial reciente de sueño:")
+
+        for session in completed_recent[:5]:
+            lines.append(f"  {_format_sleep_session(session)}")
+
+    return "\n".join(lines)
+
+
 def build_ai_user_context(
     db: Session,
     user: User,
@@ -308,9 +482,50 @@ def build_ai_user_context(
         .all()
     )
 
+    active_sleep_session = (
+        db.query(SleepSession)
+        .filter(
+            SleepSession.user_id == user.id,
+            SleepSession.is_active == True,
+        )
+        .order_by(SleepSession.start_time.desc())
+        .first()
+    )
+
+    latest_sleep_session = (
+        db.query(SleepSession)
+        .filter(
+            SleepSession.user_id == user.id,
+            SleepSession.is_active == False,
+        )
+        .order_by(SleepSession.end_time.desc())
+        .first()
+    )
+
+    recent_sleep_sessions = (
+        db.query(SleepSession)
+        .filter(SleepSession.user_id == user.id)
+        .order_by(SleepSession.start_time.desc())
+        .limit(5)
+        .all()
+    )
+
+    sleep_goals = (
+        db.query(SleepGoalProfile)
+        .filter(SleepGoalProfile.user_id == user.id)
+        .order_by(SleepGoalProfile.goal_type.asc())
+        .all()
+    )
+
     active_workout_text = _format_active_workout(active_workout)
     recent_sessions_text = _format_recent_sessions(recent_sessions)
     scheduled_text = _format_upcoming_scheduled_workouts(upcoming_scheduled_workouts)
+    sleep_context_text = _format_sleep_context(
+        active_sleep_session=active_sleep_session,
+        latest_sleep_session=latest_sleep_session,
+        recent_sleep_sessions=recent_sleep_sessions,
+        sleep_goals=sleep_goals,
+    )
 
     return f"""
 Contexto real de PulseAI:
@@ -340,10 +555,13 @@ Racha:
 
 {scheduled_text}
 
+{sleep_context_text}
+
 Reglas sobre el contexto:
 - Si el usuario pregunta por su progreso, usa estos datos reales.
 - Si el usuario pregunta qué entrenar hoy, ten en cuenta la rutina activa, la semana actual y las últimas sesiones.
-- Si el usuario pide modificar rutinas, ejercicios o agenda, de momento NO digas que ya lo has cambiado.
+- Si el usuario pregunta por sueño, descanso, horas dormidas u objetivos de sueño, usa los datos reales del bloque "Sueño y descanso".
+- Si el usuario pide modificar rutinas, ejercicios, agenda u objetivos de sueño, de momento NO digas que ya lo has cambiado.
 - Para cambios en la app, propone el cambio de forma clara y pide confirmación.
-- No inventes sesiones, rutinas activas ni entrenamientos programados si no aparecen en este contexto.
+- No inventes sesiones, rutinas activas, entrenamientos programados, registros de sueño ni objetivos de sueño si no aparecen en este contexto.
 """.strip()

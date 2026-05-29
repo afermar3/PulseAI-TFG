@@ -6,7 +6,20 @@ from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.database.models import Exercise, SavedWorkout, ScheduledWorkout, User
+from app.database.models import (
+    Exercise,
+    SavedWorkout,
+    ScheduledWorkout,
+    SleepGoalProfile,
+    User,
+)
+
+
+VALID_SLEEP_GOAL_TYPES = {
+    "ALL_DAYS",
+    "WEEKDAYS",
+    "WEEKENDS",
+}
 
 
 def _normalize(text: str) -> str:
@@ -1084,6 +1097,7 @@ def _apply_schedule_workout(
         "duration_minutes": scheduled_workout.duration_minutes,
     }
 
+
 def _apply_create_workout_plan(
     db: Session,
     user: User,
@@ -1196,6 +1210,107 @@ def _apply_create_workout_plan(
         "is_active": saved_workout.is_active,
     }
 
+
+def _is_valid_time(value: str) -> bool:
+    parts = value.split(":")
+
+    if len(parts) != 2:
+        return False
+
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1])
+    except ValueError:
+        return False
+
+    return 0 <= hour <= 23 and 0 <= minute <= 59
+
+
+def _apply_update_sleep_goal_profile(
+    db: Session,
+    user: User,
+    pending_action: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = pending_action.get("payload") or {}
+
+    goal_type = str(payload.get("goal_type") or "").upper().strip()
+    bed_time = str(payload.get("bed_time") or "").strip()
+    wake_time = str(payload.get("wake_time") or "").strip()
+    target_minutes = payload.get("target_minutes")
+    enabled = payload.get("enabled") is True
+
+    if goal_type not in VALID_SLEEP_GOAL_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tipo de objetivo de sueño no válido",
+        )
+
+    if not _is_valid_time(bed_time):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La hora de dormir no tiene formato HH:MM válido",
+        )
+
+    if not _is_valid_time(wake_time):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La hora de despertar no tiene formato HH:MM válido",
+        )
+
+    try:
+        parsed_target_minutes = int(target_minutes)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La duración objetivo no es válida",
+        )
+
+    if parsed_target_minutes <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La duración objetivo debe ser mayor que 0",
+        )
+
+    goal = (
+        db.query(SleepGoalProfile)
+        .filter(
+            SleepGoalProfile.user_id == user.id,
+            SleepGoalProfile.goal_type == goal_type,
+        )
+        .first()
+    )
+
+    if goal is None:
+        goal = SleepGoalProfile(
+            user_id=user.id,
+            goal_type=goal_type,
+            bed_time=bed_time,
+            wake_time=wake_time,
+            target_minutes=parsed_target_minutes,
+            enabled=enabled,
+        )
+
+        db.add(goal)
+    else:
+        goal.bed_time = bed_time
+        goal.wake_time = wake_time
+        goal.target_minutes = parsed_target_minutes
+        goal.enabled = enabled
+
+    db.commit()
+    db.refresh(goal)
+
+    return {
+        "success": True,
+        "sleep_goal_id": goal.id,
+        "goal_type": goal.goal_type,
+        "bed_time": goal.bed_time,
+        "wake_time": goal.wake_time,
+        "target_minutes": goal.target_minutes,
+        "enabled": goal.enabled,
+    }
+
+
 def apply_pending_action(
     db: Session,
     user: User,
@@ -1218,6 +1333,20 @@ def apply_pending_action(
         return {
             "success": True,
             "message": message,
+            "action_type": action_type,
+            "data": data,
+        }
+
+    if action_type == "update_sleep_goal_profile":
+        data = _apply_update_sleep_goal_profile(
+            db=db,
+            user=user,
+            pending_action=pending_action,
+        )
+
+        return {
+            "success": True,
+            "message": "El objetivo de sueño se ha actualizado correctamente.",
             "action_type": action_type,
             "data": data,
         }
@@ -1359,7 +1488,7 @@ def apply_pending_action(
             "action_type": action_type,
             "data": data,
         }
-    
+
     if action_type == "schedule_workout":
         data = _apply_schedule_workout(
             db=db,
@@ -1381,7 +1510,6 @@ def apply_pending_action(
             "action_type": action_type,
             "data": data,
         }
-    
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,

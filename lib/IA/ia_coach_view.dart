@@ -365,7 +365,8 @@ class _AiCoachViewState extends State<AiCoachView> {
         type == "add_exercise_to_day" ||
         type == "replace_exercise" ||
         type == "update_exercise_config" ||
-        type == "schedule_workout";
+        type == "schedule_workout" ||
+        type == "update_sleep_goal_profile";
   }
 
   @override
@@ -592,10 +593,9 @@ class _AiCoachViewState extends State<AiCoachView> {
                       _sendQuickAction(item["title"].toString());
                     },
               child: Opacity(
-                opacity:
-                    _isLoading || _isApplyingAction || _isLoadingHistory
-                        ? 0.55
-                        : 1,
+                opacity: _isLoading || _isApplyingAction || _isLoadingHistory
+                    ? 0.55
+                    : 1,
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -799,11 +799,49 @@ class _PendingActionCard extends StatelessWidget {
     }
   }
 
+  String _formatSleepGoalType(String goalType) {
+    switch (goalType) {
+      case "WEEKDAYS":
+        return "Entre semana";
+      case "WEEKENDS":
+        return "Fin de semana";
+      case "ALL_DAYS":
+        return "Todos los días";
+      default:
+        return "Objetivo de sueño";
+    }
+  }
+
+  String _formatMinutes(dynamic rawMinutes) {
+    final targetMinutes = int.tryParse(rawMinutes?.toString() ?? "") ?? 0;
+
+    if (targetMinutes <= 0) {
+      return "Duración no especificada";
+    }
+
+    final hours = targetMinutes ~/ 60;
+    final minutes = targetMinutes % 60;
+
+    if (hours <= 0) {
+      return "${minutes}min";
+    }
+
+    if (minutes == 0) {
+      return "${hours}h";
+    }
+
+    return "${hours}h ${minutes}min";
+  }
+
   String _appliedTitle() {
     final type = action["type"]?.toString();
 
     if (type == "schedule_workout") {
       return "Entrenamiento programado";
+    }
+
+    if (type == "update_sleep_goal_profile") {
+      return "Objetivo de sueño actualizado";
     }
 
     return "Cambios aplicados";
@@ -814,6 +852,10 @@ class _PendingActionCard extends StatelessWidget {
 
     if (type == "schedule_workout") {
       return "Esta propuesta ya se ha añadido a tu agenda.";
+    }
+
+    if (type == "update_sleep_goal_profile") {
+      return "Esta propuesta ya se ha aplicado a tus objetivos de sueño.";
     }
 
     return "Esta propuesta ya se ha añadido a tu rutina.";
@@ -849,6 +891,18 @@ class _PendingActionCard extends StatelessWidget {
       }
 
       return "Crear nueva rutina";
+    }
+
+    if (type == "update_sleep_goal_profile" && payload is Map) {
+      final goalType = payload["goal_type"]?.toString() ?? "";
+      final bedTime = payload["bed_time"]?.toString() ?? "--:--";
+      final wakeTime = payload["wake_time"]?.toString() ?? "--:--";
+      final targetMinutes = payload["target_minutes"];
+
+      final goalLabel = _formatSleepGoalType(goalType);
+      final durationText = _formatMinutes(targetMinutes);
+
+      return "$goalLabel · $bedTime - $wakeTime · $durationText";
     }
 
     if (type == "add_workout_day" && payload is Map) {
@@ -950,7 +1004,10 @@ class _PendingActionCard extends StatelessWidget {
         type == "missing_exercise" ||
         type == "missing_update_values" ||
         type == "missing_schedule_date" ||
-        type == "invalid_workout_days";
+        type == "invalid_workout_days" ||
+        type == "missing_sleep_goal_type" ||
+        type == "missing_sleep_goal_time" ||
+        type == "invalid_sleep_goal_duration";
 
     Color cardColor;
     Color iconColor;
@@ -968,6 +1025,10 @@ class _PendingActionCard extends StatelessWidget {
       cardColor = TColor.primerColor1.withOpacity(0.08);
       iconColor = TColor.primerColor1;
       icon = Icons.event_available_rounded;
+    } else if (type == "update_sleep_goal_profile") {
+      cardColor = Colors.indigo.withOpacity(0.08);
+      iconColor = Colors.indigo;
+      icon = Icons.bedtime_rounded;
     } else if (type == "create_workout_plan") {
       cardColor = Colors.green.withOpacity(0.08);
       iconColor = Colors.green;
@@ -1061,7 +1122,9 @@ class _PendingActionCard extends StatelessWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: type == "schedule_workout"
                               ? TColor.primerColor1
-                              : TColor.rojo,
+                              : type == "update_sleep_goal_profile"
+                                  ? Colors.indigo
+                                  : TColor.rojo,
                           foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(

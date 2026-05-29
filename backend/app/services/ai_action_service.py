@@ -1374,6 +1374,7 @@ def _find_exercise_in_day_by_message(
 
     return best_match
 
+
 def _should_activate_created_workout(message: str) -> bool:
     text = _normalize(message)
 
@@ -1396,6 +1397,7 @@ def _should_activate_created_workout(message: str) -> bool:
     ]
 
     return any(keyword in text for keyword in force_activate_keywords)
+
 
 def _build_update_exercise_config_action(
     db: Session,
@@ -1680,6 +1682,7 @@ def _find_day_for_schedule(
 
     return None
 
+
 def _build_schedule_workout_action(
     db: Session,
     user: User,
@@ -1948,6 +1951,456 @@ def _build_replace_exercise_action(
         },
     }
 
+
+def _detect_sleep_goal_type(message: str) -> Optional[str]:
+    text = _normalize(message)
+
+    weekdays_keywords = [
+        "entre semana",
+        "lunes a viernes",
+        "lun a vie",
+        "laborables",
+        "dias laborables",
+        "dias de trabajo",
+        "cuando trabajo",
+        "de lunes a viernes",
+    ]
+
+    weekend_keywords = [
+        "fin de semana",
+        "fines de semana",
+        "finde",
+        "findes",
+        "sabado",
+        "domingo",
+        "sabados",
+        "domingos",
+        "sabado y domingo",
+        "sabados y domingos",
+    ]
+
+    all_days_keywords = [
+        "todos los dias",
+        "cada dia",
+        "diario",
+        "siempre",
+        "todos",
+        "todas las noches",
+    ]
+
+    if any(keyword in text for keyword in weekdays_keywords):
+        return "WEEKDAYS"
+
+    if any(keyword in text for keyword in weekend_keywords):
+        return "WEEKENDS"
+
+    if any(keyword in text for keyword in all_days_keywords):
+        return "ALL_DAYS"
+
+    return None
+
+
+def _word_to_hour(word: str) -> Optional[int]:
+    text = _normalize(word)
+
+    word_hours = {
+        "cero": 0,
+        "una": 1,
+        "uno": 1,
+        "dos": 2,
+        "tres": 3,
+        "cuatro": 4,
+        "cinco": 5,
+        "seis": 6,
+        "siete": 7,
+        "ocho": 8,
+        "nueve": 9,
+        "diez": 10,
+        "once": 11,
+        "doce": 12,
+    }
+
+    return word_hours.get(text)
+
+
+def _parse_hour_token(value: str, *, is_bed_time: bool) -> Optional[str]:
+    text = _normalize(value).strip()
+
+    hour = None
+    minute = 0
+    explicit_24h = False
+
+    numeric_match = re.match(r"^(\d{1,2})(?:[:\.h](\d{1,2}))?$", text)
+
+    if numeric_match:
+        hour = int(numeric_match.group(1))
+
+        if numeric_match.group(2) is not None and numeric_match.group(2) != "":
+            minute = int(numeric_match.group(2))
+
+        explicit_24h = ":" in text or "." in text or "h" in text
+    else:
+        hour = _word_to_hour(text)
+
+        if hour is None:
+            return None
+
+    if hour < 0 or hour > 23:
+        return None
+
+    if minute < 0 or minute > 59:
+        return None
+
+    if is_bed_time and not explicit_24h:
+        if hour == 12:
+            hour = 0
+        elif 8 <= hour <= 11:
+            hour += 12
+
+    return f"{hour:02d}:{minute:02d}"
+
+def _extract_sleep_times(message: str) -> Optional[Dict[str, str]]:
+    text = _normalize(message)
+
+    # 1) Formatos tipo:
+    # 23:30 a 07:00
+    # 23.30 a 07.00
+    # 23:30 - 07:00
+    # 23:30 -> 07:00
+    # 23:30 hasta 07:00
+    pattern = (
+        r"(\d{1,2})[:\.](\d{2})\s*"
+        r"(?:a|hasta|-|→|->)\s*"
+        r"(\d{1,2})[:\.](\d{2})"
+    )
+
+    match = re.search(pattern, text)
+
+    if match:
+        bed_hour = int(match.group(1))
+        bed_minute = int(match.group(2))
+        wake_hour = int(match.group(3))
+        wake_minute = int(match.group(4))
+
+        if (
+            0 <= bed_hour <= 23
+            and 0 <= bed_minute <= 59
+            and 0 <= wake_hour <= 23
+            and 0 <= wake_minute <= 59
+        ):
+            return {
+                "bed_time": f"{bed_hour:02d}:{bed_minute:02d}",
+                "wake_time": f"{wake_hour:02d}:{wake_minute:02d}",
+            }
+
+        return None
+
+    # 2) Formatos tipo:
+    # de 23 a 7
+    # de 23h a 7h
+    # de 11 a 7
+    pattern_hours = r"de\s*(\d{1,2})(?:h)?\s*(?:a|hasta|-)\s*(\d{1,2})(?:h)?"
+    match_hours = re.search(pattern_hours, text)
+
+    if match_hours:
+        bed_time = _parse_hour_token(
+            match_hours.group(1),
+            is_bed_time=True,
+        )
+        wake_time = _parse_hour_token(
+            match_hours.group(2),
+            is_bed_time=False,
+        )
+
+        if bed_time is not None and wake_time is not None:
+            return {
+                "bed_time": bed_time,
+                "wake_time": wake_time,
+            }
+
+        return None
+
+    # 3) Formatos tipo:
+    # dormir a las 11 y levantarme a las 7
+    # acostarme a las doce y levantarme a las ocho
+    # dormir a la 1 y despertarme a las 9
+    hour_token = r"(\d{1,2}|cero|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)"
+
+    pattern_natural = (
+        r"(?:dormir|acostarme|acostar|irme a dormir)\s*"
+        r"(?:a\s*)?(?:las|la)?\s*"
+        rf"{hour_token}"
+        r"(?:\s*y\s*|\s*,\s*)"
+        r"(?:levantarme|despertarme|despertar|levantar)\s*"
+        r"(?:a\s*)?(?:las|la)?\s*"
+        rf"{hour_token}"
+    )
+
+    natural_match = re.search(pattern_natural, text)
+
+    if natural_match:
+        bed_time = _parse_hour_token(
+            natural_match.group(1),
+            is_bed_time=True,
+        )
+        wake_time = _parse_hour_token(
+            natural_match.group(2),
+            is_bed_time=False,
+        )
+
+        if bed_time is not None and wake_time is not None:
+            return {
+                "bed_time": bed_time,
+                "wake_time": wake_time,
+            }
+
+        return None
+
+    return None
+
+
+def _calculate_sleep_target_minutes(
+    bed_time: str,
+    wake_time: str,
+) -> int:
+    bed_hour, bed_minute = [int(part) for part in bed_time.split(":")]
+    wake_hour, wake_minute = [int(part) for part in wake_time.split(":")]
+
+    bed_date = datetime(
+        2026,
+        1,
+        1,
+        bed_hour,
+        bed_minute,
+    )
+
+    wake_date = datetime(
+        2026,
+        1,
+        1,
+        wake_hour,
+        wake_minute,
+    )
+
+    if wake_date <= bed_date:
+        wake_date = wake_date + timedelta(days=1)
+
+    return int((wake_date - bed_date).total_seconds() // 60)
+
+
+def _sleep_goal_type_label(goal_type: str) -> str:
+    if goal_type == "WEEKDAYS":
+        return "entre semana"
+
+    if goal_type == "WEEKENDS":
+        return "fin de semana"
+
+    if goal_type == "ALL_DAYS":
+        return "todos los días"
+
+    return goal_type
+
+
+def _format_sleep_minutes(minutes: int) -> str:
+    hours = minutes // 60
+    remaining_minutes = minutes % 60
+
+    if hours <= 0:
+        return f"{remaining_minutes}min"
+
+    if remaining_minutes == 0:
+        return f"{hours}h"
+
+    return f"{hours}h {remaining_minutes}min"
+
+
+def _is_sleep_info_question(message: str) -> bool:
+    text = _normalize(message)
+
+    question_starters = [
+        "cual",
+        "cuál",
+        "que",
+        "qué",
+        "cuanto",
+        "cuánto",
+        "como",
+        "cómo",
+        "cuando",
+        "cuándo",
+        "dime",
+        "muestrame",
+        "muéstrame",
+    ]
+
+    sleep_info_keywords = [
+        "objetivo de sueno",
+        "objetivo de sueño",
+        "objetivo sueno",
+        "objetivo sueño",
+        "cuanto dormi",
+        "cuánto dormí",
+        "dormi",
+        "dormí",
+        "descanso",
+        "sueno",
+        "sueño",
+    ]
+
+    starts_like_question = (
+        text.startswith("¿")
+        or text.endswith("?")
+        or any(text.startswith(starter + " ") for starter in question_starters)
+    )
+
+    has_sleep_info = any(keyword in text for keyword in sleep_info_keywords)
+
+    return starts_like_question and has_sleep_info
+
+def _is_update_sleep_goal_request(message: str) -> bool:
+    text = _normalize(message)
+
+    if _is_sleep_info_question(message):
+        return False
+
+    action_keywords = [
+        "cambia",
+        "cambiame",
+        "actualiza",
+        "modifica",
+        "pon",
+        "ponme",
+        "configura",
+        "quiero",
+        "establece",
+        "ajusta",
+        "a partir de ahora",
+        "me gustaria",
+        "me gustaría",
+    ]
+
+    sleep_keywords = [
+        "objetivo de sueño",
+        "objetivo de sueno",
+        "objetivo sueño",
+        "objetivo sueno",
+        "dormir",
+        "despertar",
+        "levantarme",
+        "despertarme",
+        "acostarme",
+        "descanso",
+        "sueño",
+        "sueno",
+    ]
+
+    has_action = any(keyword in text for keyword in action_keywords)
+    has_sleep = any(keyword in text for keyword in sleep_keywords)
+
+    if not has_action or not has_sleep:
+        return False
+
+    # Importante:
+    # Ahora detectamos intención aunque falten datos,
+    # para poder responder "falta tipo" o "faltan horas"
+    # en vez de dejar que Gemini invente una propuesta.
+    has_goal_type = _detect_sleep_goal_type(message) is not None
+    has_times = _extract_sleep_times(message) is not None
+
+    if has_goal_type or has_times:
+        return True
+
+    if "objetivo" in text:
+        return True
+
+    return False
+
+def _build_update_sleep_goal_action(
+    message: str,
+) -> Dict[str, Any]:
+    goal_type = _detect_sleep_goal_type(message)
+    times = _extract_sleep_times(message)
+
+    if goal_type is None:
+        return {
+            "type": "missing_sleep_goal_type",
+            "title": "Falta indicar el tipo de objetivo",
+            "description": (
+                "He entendido que quieres cambiar un objetivo de sueño, "
+                "pero necesito saber si es para entre semana, fin de semana o todos los días."
+            ),
+            "requires_confirmation": False,
+            "payload": {
+                "original_message": message,
+            },
+        }
+
+    if times is None:
+        return {
+            "type": "missing_sleep_goal_time",
+            "title": "Faltan las horas de sueño",
+            "description": (
+                "He entendido que quieres cambiar un objetivo de sueño, "
+                "pero necesito que indiques una hora de dormir y una hora de despertar."
+            ),
+            "requires_confirmation": False,
+            "payload": {
+                "goal_type": goal_type,
+                "original_message": message,
+            },
+        }
+
+    bed_time = times["bed_time"]
+    wake_time = times["wake_time"]
+
+    target_minutes = _calculate_sleep_target_minutes(
+        bed_time=bed_time,
+        wake_time=wake_time,
+    )
+
+    # Evitamos objetivos absurdos tipo 16h, 20h, etc.
+    # Se puede ajustar, pero para una app fitness tiene sentido.
+    if target_minutes < 180 or target_minutes > 720:
+        return {
+            "type": "invalid_sleep_goal_duration",
+            "title": "Duración de sueño poco realista",
+            "description": (
+                "He entendido las horas indicadas, pero la duración resultante "
+                "no parece razonable. Indica un objetivo entre 3h y 12h."
+            ),
+            "requires_confirmation": False,
+            "payload": {
+                "goal_type": goal_type,
+                "bed_time": bed_time,
+                "wake_time": wake_time,
+                "target_minutes": target_minutes,
+                "original_message": message,
+            },
+        }
+
+    goal_label = _sleep_goal_type_label(goal_type)
+    duration_label = _format_sleep_minutes(target_minutes)
+
+    return {
+        "type": "update_sleep_goal_profile",
+        "title": f"Actualizar objetivo de sueño de {goal_label}",
+        "description": (
+            f"Se actualizará tu objetivo de sueño de {goal_label}: "
+            f"dormir a las {bed_time}, despertar a las {wake_time}, "
+            f"con una duración objetivo de {duration_label}."
+        ),
+        "requires_confirmation": True,
+        "payload": {
+            "goal_type": goal_type,
+            "bed_time": bed_time,
+            "wake_time": wake_time,
+            "target_minutes": target_minutes,
+            "enabled": True,
+            "original_message": message,
+        },
+    }
+
+
 def _format_schedule_date_for_answer(raw_date: Any) -> str:
     if not raw_date:
         return "Fecha pendiente"
@@ -1968,6 +2421,7 @@ def _format_schedule_date_for_answer(raw_date: Any) -> str:
         return formatted
     except Exception:
         return str(raw_date)
+
 
 def build_pending_action_answer(
     pending_action: Dict[str, Any],
@@ -2060,6 +2514,56 @@ def build_pending_action_answer(
         ])
 
         return "\n".join(lines)
+
+    if action_type == "update_sleep_goal_profile":
+        goal_type = payload.get("goal_type", "ALL_DAYS")
+        bed_time = payload.get("bed_time", "--:--")
+        wake_time = payload.get("wake_time", "--:--")
+        target_minutes = payload.get("target_minutes", 0)
+        enabled = payload.get("enabled") is True
+
+        goal_label = _sleep_goal_type_label(goal_type)
+        duration_label = _format_sleep_minutes(int(target_minutes or 0))
+
+        status_text = "activo" if enabled else "desactivado"
+
+        return "\n".join([
+            "He preparado una propuesta para actualizar tu objetivo de sueño.",
+            "",
+            "Propuesta:",
+            f"- Tipo: {goal_label}",
+            f"- Hora objetivo para dormir: {bed_time}",
+            f"- Hora objetivo para despertar: {wake_time}",
+            f"- Duración objetivo: {duration_label}",
+            f"- Estado: {status_text}",
+            "",
+            "Importante:",
+            "- No he aplicado todavía el cambio.",
+            "- Si lo confirmas, se guardará en tus objetivos de sueño.",
+            "",
+            "¿Quieres aplicar este objetivo de sueño?",
+        ])
+
+    if action_type == "missing_sleep_goal_type":
+        return (
+            f"{title}\n\n"
+            f"{description}\n\n"
+            "Ejemplo: “Cambia mi objetivo de entre semana a dormir de 23:30 a 07:00”."
+        )
+
+    if action_type == "missing_sleep_goal_time":
+        return (
+            f"{title}\n\n"
+            f"{description}\n\n"
+            "Ejemplo: “Los fines de semana quiero dormir de 01:00 a 09:30”."
+        )
+    
+    if action_type == "invalid_sleep_goal_duration":
+        return (
+            f"{title}\n\n"
+            f"{description}\n\n"
+            "Ejemplo válido: “Cambia mi objetivo de entre semana a dormir de 23:30 a 07:00”."
+        )
 
     if action_type == "add_workout_day":
         day = payload.get("day", {})
@@ -2283,13 +2787,18 @@ def detect_pending_action(
     user: User,
     message: str,
 ) -> Optional[Dict[str, Any]]:
+    if _is_update_sleep_goal_request(message):
+        return _build_update_sleep_goal_action(
+            message=message,
+        )
+
     if _is_create_workout_plan_request(message):
         return _build_create_workout_plan_action(
             db=db,
             user=user,
             message=message,
         )
-    
+
     if _is_update_exercise_config_request(message):
         return _build_update_exercise_config_action(
             db=db,
