@@ -14,6 +14,7 @@ from app.routers import (
     workout_progress_router,
     sleep_router,
     sleep_goal_router,
+    sleep_goal_profile_router,
 )
 Base.metadata.create_all(bind=engine)
 
@@ -42,7 +43,7 @@ app.include_router(scheduled_workout_router.router)
 app.include_router(workout_progress_router.router)
 app.include_router(sleep_router.router)
 app.include_router(sleep_goal_router.router)
-
+app.include_router(sleep_goal_profile_router.router)
 
 @app.get("/")
 def root():

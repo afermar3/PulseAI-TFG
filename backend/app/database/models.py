@@ -42,11 +42,17 @@ class User(Base):
     )
 
     sleep_goal = relationship(
-    "SleepGoal",
-    back_populates="user",
-    uselist=False,
-    cascade="all, delete-orphan",
+        "SleepGoal",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
+
+    sleep_goal_profiles = relationship(
+        "SleepGoalProfile",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )   
 
     ai_chat_messages = relationship(
         "AiChatMessage",
@@ -170,6 +176,41 @@ class SleepGoal(Base):
     )
 
     user = relationship("User", back_populates="sleep_goal")
+
+
+class SleepGoalProfile(Base):
+    __tablename__ = "sleep_goal_profiles"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "goal_type",
+            name="uq_sleep_goal_profiles_user_goal_type",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    goal_type = Column(String, nullable=False)
+    # ALL_DAYS / WEEKDAYS / WEEKENDS
+
+    bed_time = Column(String, nullable=False)   # HH:MM
+    wake_time = Column(String, nullable=False)  # HH:MM
+
+    target_minutes = Column(Integer, nullable=False)
+
+    enabled = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    user = relationship("User", back_populates="sleep_goal_profiles")
 
 
 class Exercise(Base):

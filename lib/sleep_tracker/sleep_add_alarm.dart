@@ -6,10 +6,12 @@ import '../../common_widget/icon_title_next_row.dart';
 import '../../common_widget/round_button.dart';
 
 class SleepAddAlarmView extends StatefulWidget {
+  final String goalType;
   final Map<String, dynamic>? initialGoal;
 
   const SleepAddAlarmView({
     super.key,
+    required this.goalType,
     this.initialGoal,
   });
 
@@ -22,8 +24,6 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
   late TimeOfDay wakeTime;
 
   bool enabled = true;
-  String repeatText = "Todos los días";
-
   bool _isSaving = false;
 
   @override
@@ -32,18 +32,39 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
 
     bedtime = _parseTimeOfDay(
       widget.initialGoal?["bed_time"],
-      fallback: const TimeOfDay(hour: 23, minute: 30),
+      fallback: _defaultBedtime(),
     );
 
     wakeTime = _parseTimeOfDay(
       widget.initialGoal?["wake_time"],
-      fallback: const TimeOfDay(hour: 7, minute: 30),
+      fallback: _defaultWakeTime(),
     );
 
-    repeatText =
-        widget.initialGoal?["repeat"]?.toString() ?? "Todos los días";
-
     enabled = widget.initialGoal?["enabled"] as bool? ?? true;
+  }
+
+  TimeOfDay _defaultBedtime() {
+    switch (widget.goalType) {
+      case "WEEKENDS":
+        return const TimeOfDay(hour: 1, minute: 0);
+      case "WEEKDAYS":
+        return const TimeOfDay(hour: 23, minute: 30);
+      case "ALL_DAYS":
+      default:
+        return const TimeOfDay(hour: 23, minute: 30);
+    }
+  }
+
+  TimeOfDay _defaultWakeTime() {
+    switch (widget.goalType) {
+      case "WEEKENDS":
+        return const TimeOfDay(hour: 9, minute: 30);
+      case "WEEKDAYS":
+        return const TimeOfDay(hour: 7, minute: 0);
+      case "ALL_DAYS":
+      default:
+        return const TimeOfDay(hour: 7, minute: 30);
+    }
   }
 
   TimeOfDay _parseTimeOfDay(
@@ -117,6 +138,14 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
     return "${hours}h ${minutes}min";
   }
 
+  String _goalTypeTitle() {
+    return SleepGoalService.goalTypeLabel(widget.goalType);
+  }
+
+  String _goalTypeDescription() {
+    return SleepGoalService.goalTypeDescription(widget.goalType);
+  }
+
   Future<void> _selectTime({
     required TimeOfDay initialTime,
     required Function(TimeOfDay value) onSelected,
@@ -154,123 +183,6 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
     }
   }
 
-  void _showRepeatPicker() {
-    final options = [
-      "Todos los días",
-      "Lun a Vie",
-      "Fines de semana",
-      "Una vez",
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(22, 16, 22, 22),
-          decoration: BoxDecoration(
-            color: TColor.white,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(28),
-            ),
-          ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 46,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: TColor.gray.withOpacity(0.25),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        "Repetir objetivo",
-                        style: TextStyle(
-                          color: TColor.black,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                      },
-                      icon: Icon(
-                        Icons.close_rounded,
-                        color: TColor.gray,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ...options.map((option) {
-                  final isSelected = option == repeatText;
-
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(18),
-                    onTap: () {
-                      setState(() {
-                        repeatText = option;
-                      });
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 15,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? TColor.rojo.withOpacity(0.10)
-                            : Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: isSelected
-                              ? TColor.rojo.withOpacity(0.25)
-                              : Colors.grey.shade100,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              option,
-                              style: TextStyle(
-                                color: isSelected ? TColor.rojo : TColor.black,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          if (isSelected)
-                            Icon(
-                              Icons.check_circle_rounded,
-                              color: TColor.rojo,
-                              size: 22,
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _saveGoal() async {
     if (_isSaving) return;
 
@@ -280,10 +192,10 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
 
     try {
       await SleepGoalService.saveSleepGoal(
+        goalType: widget.goalType,
         bedTime: _formatTime(bedtime),
         wakeTime: _formatTime(wakeTime),
         targetMinutes: _targetMinutes(),
-        repeat: repeatText,
         enabled: enabled,
       );
 
@@ -368,9 +280,9 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _HeaderSleepCard(
+                      title: _goalTypeTitle(),
                       durationText: _sleepDurationText(),
-                      subtitle:
-                          "No es una alarma. Es una referencia para comparar tu descanso real.",
+                      subtitle: _goalTypeDescription(),
                     ),
                     const SizedBox(height: 24),
                     Text(
@@ -418,14 +330,6 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
                       time: _sleepDurationText(),
                       color: TColor.lightGray,
                       onPressed: () {},
-                    ),
-                    const SizedBox(height: 10),
-                    IconTitleNextRow(
-                      icon: "assets/img/Repeat.png",
-                      title: "Repetición",
-                      time: repeatText,
-                      color: TColor.lightGray,
-                      onPressed: _showRepeatPicker,
                     ),
                     const SizedBox(height: 20),
                     Text(
@@ -485,10 +389,12 @@ class _SleepAddAlarmViewState extends State<SleepAddAlarmView> {
 }
 
 class _HeaderSleepCard extends StatelessWidget {
+  final String title;
   final String durationText;
   final String subtitle;
 
   const _HeaderSleepCard({
+    required this.title,
     required this.durationText,
     required this.subtitle,
   });
@@ -528,7 +434,7 @@ class _HeaderSleepCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Objetivo de descanso",
+                  title,
                   style: TextStyle(
                     color: TColor.black,
                     fontSize: 14,

@@ -19,7 +19,7 @@ class _SleepTrackerViewState extends State<SleepTrackerView> {
 
   Map<String, dynamic>? _activeSleepSession;
   Map<String, dynamic>? _latestSleepSession;
-  Map<String, dynamic>? _sleepGoal;
+  Map<String, dynamic>? _effectiveGoalData;
 
   List<dynamic> _sleepSessions = [];
 
@@ -34,7 +34,7 @@ class _SleepTrackerViewState extends State<SleepTrackerView> {
       final active = await SleepService.getActiveSleepSession();
       final latest = await SleepService.getLatestSleepSession();
       final sessions = await SleepService.getMySleepSessions();
-      final goal = await SleepGoalService.getMySleepGoal();
+      final effectiveGoal = await SleepGoalService.getEffectiveSleepGoalToday();
 
       if (!mounted) return;
 
@@ -42,7 +42,7 @@ class _SleepTrackerViewState extends State<SleepTrackerView> {
         _activeSleepSession = active;
         _latestSleepSession = latest;
         _sleepSessions = sessions;
-        _sleepGoal = goal;
+        _effectiveGoalData = effectiveGoal;
         _errorMessage = null;
         _isLoading = false;
       });
@@ -164,13 +164,27 @@ class _SleepTrackerViewState extends State<SleepTrackerView> {
     return int.tryParse(value.toString());
   }
 
+  Map<String, dynamic>? _effectiveGoal() {
+    final goal = _effectiveGoalData?["goal"];
+
+    if (goal is Map) {
+      return Map<String, dynamic>.from(goal);
+    }
+
+    return null;
+  }
+
   bool _hasEnabledGoal() {
-    return _sleepGoal != null && _sleepGoal?["enabled"] == true;
+    final goal = _effectiveGoal();
+
+    return goal != null && goal["enabled"] == true;
   }
 
   int _targetSleepMinutes() {
-    if (_hasEnabledGoal()) {
-      final target = _toInt(_sleepGoal?["target_minutes"]);
+    final goal = _effectiveGoal();
+
+    if (goal != null && goal["enabled"] == true) {
+      final target = _toInt(goal["target_minutes"]);
 
       if (target != null && target > 0) {
         return target;
@@ -181,11 +195,13 @@ class _SleepTrackerViewState extends State<SleepTrackerView> {
   }
 
   String _targetSleepLabel() {
-    if (_hasEnabledGoal()) {
-      return "Tu objetivo";
+    final source = _effectiveGoalData?["source"]?.toString();
+
+    if (source == null || source == "RECOMMENDED") {
+      return "Recomendado";
     }
 
-    return "Recomendado";
+    return SleepGoalService.goalTypeLabel(source);
   }
 
   String _targetSleepDurationText() {
@@ -193,15 +209,18 @@ class _SleepTrackerViewState extends State<SleepTrackerView> {
   }
 
   String _goalScheduleText() {
-    if (!_hasEnabledGoal()) {
+    final goal = _effectiveGoal();
+
+    if (goal == null) {
       return "Configura un objetivo personalizado";
     }
 
-    final bedTime = _sleepGoal?["bed_time"]?.toString() ?? "--:--";
-    final wakeTime = _sleepGoal?["wake_time"]?.toString() ?? "--:--";
-    final repeat = _sleepGoal?["repeat"]?.toString() ?? "Sin repetición";
+    final bedTime = goal["bed_time"]?.toString() ?? "--:--";
+    final wakeTime = goal["wake_time"]?.toString() ?? "--:--";
+    final source = _effectiveGoalData?["source"]?.toString() ?? "";
+    final label = SleepGoalService.goalTypeLabel(source);
 
-    return "$bedTime - $wakeTime · $repeat";
+    return "$bedTime - $wakeTime · $label";
   }
 
   String _formatTime(DateTime? date) {

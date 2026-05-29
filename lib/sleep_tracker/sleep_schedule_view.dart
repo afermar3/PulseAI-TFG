@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:simple_animation_progress_bar/simple_animation_progress_bar.dart';
 
 import '../../widgets/color_extension.dart';
-import '../../common_widget/round_button.dart';
 
 class SleepScheduleView extends StatefulWidget {
   const SleepScheduleView({super.key});
@@ -18,22 +17,31 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
   bool _isActionLoading = false;
   String? _errorMessage;
 
-  Map<String, dynamic>? _sleepGoal;
+  List<dynamic> _sleepGoals = [];
+  Map<String, dynamic>? _effectiveGoalData;
+
+  final List<String> _goalTypes = [
+    "WEEKDAYS",
+    "WEEKENDS",
+    "ALL_DAYS",
+  ];
 
   @override
   void initState() {
     super.initState();
-    _loadSleepGoal();
+    _loadSleepGoals();
   }
 
-  Future<void> _loadSleepGoal() async {
+  Future<void> _loadSleepGoals() async {
     try {
-      final goal = await SleepGoalService.getMySleepGoal();
+      final goals = await SleepGoalService.getMySleepGoals();
+      final effectiveGoal = await SleepGoalService.getEffectiveSleepGoalToday();
 
       if (!mounted) return;
 
       setState(() {
-        _sleepGoal = goal;
+        _sleepGoals = goals;
+        _effectiveGoalData = effectiveGoal;
         _errorMessage = null;
         _isLoading = false;
       });
@@ -47,43 +55,65 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
     }
   }
 
-  Future<void> _openEditGoal() async {
+  Map<String, dynamic>? _goalByType(String goalType) {
+    for (final item in _sleepGoals) {
+      if (item is! Map) continue;
+
+      final goal = Map<String, dynamic>.from(item);
+
+      if (goal["goal_type"] == goalType) {
+        return goal;
+      }
+    }
+
+    return null;
+  }
+
+  Future<void> _openEditGoal({
+    required String goalType,
+    Map<String, dynamic>? initialGoal,
+  }) async {
     final updated = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => SleepAddAlarmView(
-          initialGoal: _sleepGoal,
+          goalType: goalType,
+          initialGoal: initialGoal,
         ),
       ),
     );
 
     if (updated == true) {
-      _loadSleepGoal();
+      _loadSleepGoals();
     }
   }
 
-  Future<void> _toggleGoal() async {
-    if (_sleepGoal == null || _isActionLoading) return;
+  Future<void> _toggleGoal(Map<String, dynamic> goal) async {
+    if (_isActionLoading) return;
+
+    final goalId = _toInt(goal["id"]);
+
+    if (goalId == null) {
+      _showError("No se ha podido identificar el objetivo de sueño");
+      return;
+    }
 
     setState(() {
       _isActionLoading = true;
     });
 
     try {
-      final updatedGoal = await SleepGoalService.toggleSleepGoal();
+      await SleepGoalService.toggleSleepGoal(goalId);
+      await _loadSleepGoals();
 
       if (!mounted) return;
-
-      setState(() {
-        _sleepGoal = updatedGoal;
-      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            updatedGoal["enabled"] == true
-                ? "Objetivo de sueño activado"
-                : "Objetivo de sueño desactivado",
+            goal["enabled"] == true
+                ? "Objetivo de sueño desactivado"
+                : "Objetivo de sueño activado",
           ),
           backgroundColor: TColor.rojo,
           behavior: SnackBarBehavior.floating,
@@ -100,10 +130,17 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
     }
   }
 
-  Future<void> _deleteGoal() async {
-    if (_sleepGoal == null || _isActionLoading) return;
+  Future<void> _deleteGoal(Map<String, dynamic> goal) async {
+    if (_isActionLoading) return;
 
-    final confirmed = await _confirmDelete();
+    final goalId = _toInt(goal["id"]);
+
+    if (goalId == null) {
+      _showError("No se ha podido identificar el objetivo de sueño");
+      return;
+    }
+
+    final confirmed = await _confirmDelete(goal);
 
     if (confirmed != true) return;
 
@@ -112,13 +149,10 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
     });
 
     try {
-      await SleepGoalService.deleteSleepGoal();
+      await SleepGoalService.deleteSleepGoal(goalId);
+      await _loadSleepGoals();
 
       if (!mounted) return;
-
-      setState(() {
-        _sleepGoal = null;
-      });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -138,7 +172,10 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
     }
   }
 
-  Future<bool?> _confirmDelete() {
+  Future<bool?> _confirmDelete(Map<String, dynamic> goal) {
+    final goalType = goal["goal_type"]?.toString() ?? "";
+    final title = SleepGoalService.goalTypeLabel(goalType);
+
     return showModalBottomSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -165,7 +202,7 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
                   ),
                 ),
                 const SizedBox(height: 22),
-                Icon(
+                const Icon(
                   Icons.delete_outline_rounded,
                   color: Colors.redAccent,
                   size: 42,
@@ -181,7 +218,7 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "Se eliminará tu objetivo de descanso configurado. Podrás crear uno nuevo cuando quieras.",
+                  "Se eliminará el objetivo de sueño de $title. Podrás configurarlo de nuevo cuando quieras.",
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: TColor.gray,
@@ -259,17 +296,21 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
     );
   }
 
-  int _toInt(dynamic value) {
-    if (value == null) return 0;
+  int? _toInt(dynamic value) {
+    if (value == null) return null;
 
     if (value is int) return value;
     if (value is num) return value.toInt();
 
-    return int.tryParse(value.toString()) ?? 0;
+    return int.tryParse(value.toString());
+  }
+
+  int _toIntSafe(dynamic value) {
+    return _toInt(value) ?? 0;
   }
 
   String _formatDurationFromMinutes(dynamic value) {
-    final minutes = _toInt(value);
+    final minutes = _toIntSafe(value);
 
     if (minutes <= 0) {
       return "--";
@@ -289,38 +330,62 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
     return "${hours}h ${remainingMinutes}min";
   }
 
-  double _sleepRatio() {
-    final minutes = _toInt(_sleepGoal?["target_minutes"]);
+  double _recommendedRatio(Map<String, dynamic>? goal) {
+    final minutes = _toIntSafe(goal?["target_minutes"]);
 
     if (minutes <= 0) return 0.0;
 
     return (minutes / 480).clamp(0.0, 1.0);
   }
 
-  String _goalStatusText() {
-    if (_sleepGoal == null) {
-      return "Sin objetivo configurado";
+  Map<String, dynamic>? _effectiveGoal() {
+    final goal = _effectiveGoalData?["goal"];
+
+    if (goal is Map) {
+      return Map<String, dynamic>.from(goal);
     }
 
-    final enabled = _sleepGoal?["enabled"] == true;
-
-    return enabled ? "Objetivo activo" : "Objetivo desactivado";
+    return null;
   }
 
-  String _bedTimeText() {
-    return _sleepGoal?["bed_time"]?.toString() ?? "--:--";
+  String _effectiveGoalTitle() {
+    final source = _effectiveGoalData?["source"]?.toString();
+
+    if (source == null || source == "RECOMMENDED") {
+      return "Recomendado";
+    }
+
+    return SleepGoalService.goalTypeLabel(source);
   }
 
-  String _wakeTimeText() {
-    return _sleepGoal?["wake_time"]?.toString() ?? "--:--";
+  String _effectiveGoalDescription() {
+    final goal = _effectiveGoal();
+
+    if (goal == null) {
+      return "Hoy se usará el objetivo recomendado de 8h.";
+    }
+
+    final bedTime = goal["bed_time"]?.toString() ?? "--:--";
+    final wakeTime = goal["wake_time"]?.toString() ?? "--:--";
+    final duration = _formatDurationFromMinutes(goal["target_minutes"]);
+
+    return "$bedTime - $wakeTime · $duration";
   }
 
-  String _repeatText() {
-    return _sleepGoal?["repeat"]?.toString() ?? "Sin repetición";
-  }
+  int _activeGoalCount() {
+    int count = 0;
 
-  String _durationText() {
-    return _formatDurationFromMinutes(_sleepGoal?["target_minutes"]);
+    for (final item in _sleepGoals) {
+      if (item is! Map) continue;
+
+      final goal = Map<String, dynamic>.from(item);
+
+      if (goal["enabled"] == true) {
+        count++;
+      }
+    }
+
+    return count;
   }
 
   @override
@@ -356,7 +421,7 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
           ),
         ),
         title: Text(
-          "Objetivo de sueño",
+          "Objetivos de sueño",
           style: TextStyle(
             color: TColor.black,
             fontSize: 18,
@@ -366,7 +431,7 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
         actions: [
           InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: _loadSleepGoal,
+            onTap: _loadSleepGoals,
             child: Container(
               margin: const EdgeInsets.all(8),
               height: 40,
@@ -394,175 +459,97 @@ class _SleepScheduleViewState extends State<SleepScheduleView> {
               )
             : RefreshIndicator(
                 color: TColor.rojo,
-                onRefresh: _loadSleepGoal,
+                onRefresh: _loadSleepGoals,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (_errorMessage != null) ...[
                         _ErrorGoalCard(
                           message: _errorMessage!,
-                          onRetry: _loadSleepGoal,
+                          onRetry: _loadSleepGoals,
                         ),
                         const SizedBox(height: 18),
                       ],
                       _SleepHeaderCard(
                         media: media,
-                        title: "Objetivo de descanso",
-                        duration: _sleepGoal == null
-                            ? "No configurado"
-                            : _durationText(),
-                        subtitle: _goalStatusText(),
+                        title: "Objetivo efectivo de hoy",
+                        duration: _effectiveGoalTitle(),
+                        subtitle: _effectiveGoalDescription(),
+                      ),
+                      const SizedBox(height: 22),
+                      _SummaryGoalCard(
+                        totalGoals: _sleepGoals.length,
+                        activeGoals: _activeGoalCount(),
                       ),
                       const SizedBox(height: 22),
                       Text(
-                        "Configuración",
+                        "Tus objetivos",
                         style: TextStyle(
                           color: TColor.black,
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      if (_sleepGoal == null)
-                        _EmptyGoalCard(
-                          onCreate: _openEditGoal,
-                        )
-                      else ...[
-                        _GoalInfoCard(
-                          icon: Icons.bedtime_rounded,
-                          title: "Hora objetivo de dormir",
-                          value: _bedTimeText(),
+                      const SizedBox(height: 6),
+                      Text(
+                        "Configura un horario distinto para entre semana y fin de semana.",
+                        style: TextStyle(
+                          color: TColor.gray,
+                          fontSize: 12,
+                          height: 1.3,
+                          fontWeight: FontWeight.w500,
                         ),
-                        const SizedBox(height: 12),
-                        _GoalInfoCard(
-                          icon: Icons.wb_sunny_rounded,
-                          title: "Hora objetivo de despertar",
-                          value: _wakeTimeText(),
-                        ),
-                        const SizedBox(height: 12),
-                        _GoalInfoCard(
-                          icon: Icons.timer_rounded,
-                          title: "Duración objetivo",
-                          value: _durationText(),
-                        ),
-                        const SizedBox(height: 12),
-                        _GoalInfoCard(
-                          icon: Icons.repeat_rounded,
-                          title: "Repetición",
-                          value: _repeatText(),
-                        ),
-                        const SizedBox(height: 18),
-                        _GoalProgressCard(
-                          media: media,
-                          summary: _durationText(),
-                          ratio: _sleepRatio(),
-                        ),
-                        const SizedBox(height: 22),
-                        _buildActionButtons(),
-                      ],
+                      ),
+                      const SizedBox(height: 14),
+                      ..._goalTypes.map((goalType) {
+                        final goal = _goalByType(goalType);
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: _GoalProfileCard(
+                            goalType: goalType,
+                            goal: goal,
+                            ratio: _recommendedRatio(goal),
+                            durationText: goal == null
+                                ? "No configurado"
+                                : _formatDurationFromMinutes(
+                                    goal["target_minutes"],
+                                  ),
+                            onCreate: () {
+                              _openEditGoal(
+                                goalType: goalType,
+                                initialGoal: null,
+                              );
+                            },
+                            onEdit: goal == null
+                                ? null
+                                : () {
+                                    _openEditGoal(
+                                      goalType: goalType,
+                                      initialGoal: goal,
+                                    );
+                                  },
+                            onToggle: goal == null
+                                ? null
+                                : () {
+                                    _toggleGoal(goal);
+                                  },
+                            onDelete: goal == null
+                                ? null
+                                : () {
+                                    _deleteGoal(goal);
+                                  },
+                          ),
+                        );
+                      }),
                     ],
                   ),
                 ),
               ),
       ),
-      floatingActionButton: _sleepGoal == null
-          ? InkWell(
-              borderRadius: BorderRadius.circular(28),
-              onTap: _openEditGoal,
-              child: Container(
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: TColor.primaryG),
-                  borderRadius: BorderRadius.circular(29),
-                  boxShadow: [
-                    BoxShadow(
-                      color: TColor.rojo.withOpacity(0.35),
-                      blurRadius: 16,
-                      offset: const Offset(0, 7),
-                    ),
-                  ],
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.add_rounded,
-                  size: 28,
-                  color: TColor.white,
-                ),
-              ),
-            )
-          : null,
-    );
-  }
-
-  Widget _buildActionButtons() {
-    final enabled = _sleepGoal?["enabled"] == true;
-
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: RoundButton(
-            title: "Editar objetivo",
-            onPressed: _openEditGoal,
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton.icon(
-            onPressed: _isActionLoading ? null : _toggleGoal,
-            icon: Icon(
-              enabled
-                  ? Icons.pause_circle_outline_rounded
-                  : Icons.play_circle_outline_rounded,
-            ),
-            label: Text(
-              enabled ? "Desactivar objetivo" : "Activar objetivo",
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: enabled ? TColor.rojo : Colors.green,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
-              textStyle: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: OutlinedButton.icon(
-            onPressed: _isActionLoading ? null : _deleteGoal,
-            icon: const Icon(Icons.delete_outline_rounded),
-            label: const Text("Eliminar objetivo"),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.redAccent,
-              side: const BorderSide(
-                color: Colors.redAccent,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
-              textStyle: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -622,9 +609,12 @@ class _SleepHeaderCard extends StatelessWidget {
                 const SizedBox(height: 5),
                 Text(
                   subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: TColor.gray,
                     fontSize: 12,
+                    height: 1.25,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -642,169 +632,122 @@ class _SleepHeaderCard extends StatelessWidget {
   }
 }
 
-class _GoalInfoCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String value;
+class _SummaryGoalCard extends StatelessWidget {
+  final int totalGoals;
+  final int activeGoals;
 
-  const _GoalInfoCard({
-    required this.icon,
-    required this.title,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: TColor.rojo.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              icon,
-              color: TColor.rojo,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                color: TColor.black,
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              color: TColor.rojo,
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  BoxDecoration _cardDecoration() {
-    return BoxDecoration(
-      color: TColor.white,
-      borderRadius: BorderRadius.circular(22),
-      border: Border.all(
-        color: Colors.grey.shade100,
-      ),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.045),
-          blurRadius: 14,
-          offset: const Offset(0, 7),
-        ),
-      ],
-    );
-  }
-}
-
-class _GoalProgressCard extends StatelessWidget {
-  final Size media;
-  final String summary;
-  final double ratio;
-
-  const _GoalProgressCard({
-    required this.media,
-    required this.summary,
-    required this.ratio,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final percentage = (ratio * 100).round();
-
-    return Container(
-      width: double.maxFinite,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: TColor.rojo.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Comparado con el objetivo recomendado de 8h",
-            style: TextStyle(
-              color: TColor.black,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            summary,
-            style: TextStyle(
-              color: TColor.gray,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 15),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              SimpleAnimationProgressBar(
-                height: 15,
-                width: media.width - 80,
-                backgroundColor: Colors.grey.shade100,
-                foregroundColor: Colors.purple,
-                ratio: ratio,
-                direction: Axis.horizontal,
-                curve: Curves.fastLinearToSlowEaseIn,
-                duration: const Duration(seconds: 3),
-                borderRadius: BorderRadius.circular(7.5),
-                gradientColor: LinearGradient(
-                  colors: TColor.primaryG,
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-              ),
-              Text(
-                "$percentage%",
-                style: TextStyle(
-                  color: TColor.black,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyGoalCard extends StatelessWidget {
-  final VoidCallback onCreate;
-
-  const _EmptyGoalCard({
-    required this.onCreate,
+  const _SummaryGoalCard({
+    required this.totalGoals,
+    required this.activeGoals,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: TColor.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.045),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: TColor.rojo.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Icon(
+              Icons.bedtime_rounded,
+              color: TColor.rojo,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "$activeGoals objetivos activos",
+                  style: TextStyle(
+                    color: TColor.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "$totalGoals configurados en total",
+                  style: TextStyle(
+                    color: TColor.gray,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoalProfileCard extends StatelessWidget {
+  final String goalType;
+  final Map<String, dynamic>? goal;
+  final double ratio;
+  final String durationText;
+  final VoidCallback onCreate;
+  final VoidCallback? onEdit;
+  final VoidCallback? onToggle;
+  final VoidCallback? onDelete;
+
+  const _GoalProfileCard({
+    required this.goalType,
+    required this.goal,
+    required this.ratio,
+    required this.durationText,
+    required this.onCreate,
+    required this.onEdit,
+    required this.onToggle,
+    required this.onDelete,
+  });
+
+  String _bedTimeText() {
+    return goal?["bed_time"]?.toString() ?? "--:--";
+  }
+
+  String _wakeTimeText() {
+    return goal?["wake_time"]?.toString() ?? "--:--";
+  }
+
+  bool _enabled() {
+    return goal?["enabled"] == true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasGoal = goal != null;
+    final title = SleepGoalService.goalTypeLabel(goalType);
+    final description = SleepGoalService.goalTypeDescription(goalType);
+    final percentage = (ratio * 100).round();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: TColor.white,
         borderRadius: BorderRadius.circular(24),
@@ -821,56 +764,325 @@ class _EmptyGoalCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Container(
-            width: 82,
-            height: 82,
-            decoration: BoxDecoration(
-              color: TColor.rojo.withOpacity(0.10),
-              borderRadius: BorderRadius.circular(28),
+          Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: TColor.rojo.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(
+                  goalType == "WEEKENDS"
+                      ? Icons.weekend_rounded
+                      : goalType == "WEEKDAYS"
+                          ? Icons.work_rounded
+                          : Icons.calendar_month_rounded,
+                  color: TColor.rojo,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: TColor.black,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: TColor.gray,
+                        fontSize: 11,
+                        height: 1.25,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (hasGoal)
+                Transform.scale(
+                  scale: 0.75,
+                  child: Switch(
+                    value: _enabled(),
+                    activeColor: TColor.white,
+                    activeTrackColor: TColor.rojo,
+                    inactiveThumbColor: TColor.white,
+                    inactiveTrackColor: Colors.grey.shade300,
+                    onChanged: (_) {
+                      if (onToggle != null) onToggle!();
+                    },
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (!hasGoal)
+            _EmptyGoalButton(
+              onPressed: onCreate,
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniInfo(
+                    title: "Dormir",
+                    value: _bedTimeText(),
+                    icon: Icons.bedtime_rounded,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _MiniInfo(
+                    title: "Despertar",
+                    value: _wakeTimeText(),
+                    icon: Icons.wb_sunny_rounded,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _MiniInfo(
+                    title: "Objetivo",
+                    value: durationText,
+                    icon: Icons.timer_rounded,
+                  ),
+                ),
+              ],
             ),
-            child: Icon(
-              Icons.bedtime_rounded,
+            const SizedBox(height: 14),
+            _ProgressAgainstRecommended(
+              ratio: ratio,
+              percentage: percentage,
+              durationText: durationText,
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_rounded, size: 18),
+                    label: const Text("Editar"),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: TColor.rojo,
+                      side: BorderSide(
+                        color: TColor.rojo.withOpacity(0.35),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: const Text("Eliminar"),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: const BorderSide(
+                        color: Colors.redAccent,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyGoalButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _EmptyGoalButton({
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onPressed,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
+        decoration: BoxDecoration(
+          color: TColor.rojo.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: TColor.rojo.withOpacity(0.10),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.add_rounded,
               color: TColor.rojo,
-              size: 40,
+              size: 22,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              "Configurar objetivo",
+              style: TextStyle(
+                color: TColor.rojo,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniInfo extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+
+  const _MiniInfo({
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            color: TColor.rojo,
+            size: 18,
+          ),
+          const SizedBox(height: 5),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: TColor.gray,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 3),
           Text(
-            "Sin objetivo de sueño",
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: TColor.black,
-              fontSize: 18,
+              fontSize: 11,
               fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProgressAgainstRecommended extends StatelessWidget {
+  final double ratio;
+  final int percentage;
+  final String durationText;
+
+  const _ProgressAgainstRecommended({
+    required this.ratio,
+    required this.percentage,
+    required this.durationText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: TColor.rojo.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            "Configura una hora objetivo para dormir y despertar. No es una alarma, solo una referencia para comparar tu descanso real.",
-            textAlign: TextAlign.center,
+            "Comparado con el objetivo recomendado de 8h",
+            style: TextStyle(
+              color: TColor.black,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            durationText,
             style: TextStyle(
               color: TColor.gray,
-              fontSize: 13,
-              height: 1.4,
+              fontSize: 11,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: onCreate,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text("Configurar objetivo"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: TColor.rojo,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
+          const SizedBox(height: 12),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SimpleAnimationProgressBar(
+                height: 14,
+                width: double.infinity,
+                backgroundColor: Colors.grey.shade100,
+                foregroundColor: Colors.purple,
+                ratio: ratio,
+                direction: Axis.horizontal,
+                curve: Curves.fastLinearToSlowEaseIn,
+                duration: const Duration(seconds: 2),
+                borderRadius: BorderRadius.circular(7),
+                gradientColor: LinearGradient(
+                  colors: TColor.primaryG,
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
                 ),
               ),
-            ),
+              Text(
+                "$percentage%",
+                style: TextStyle(
+                  color: TColor.black,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
           ),
         ],
       ),
