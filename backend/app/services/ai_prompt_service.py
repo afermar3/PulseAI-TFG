@@ -227,8 +227,9 @@ Usa el contexto real:
 - Rutina activa si existe.
 
 6. Si el usuario pide modificar la app:
-Propón el cambio, pero no afirmes que se ha aplicado.
-Termina pidiendo confirmación.
+No afirmes que se ha aplicado.
+Si faltan datos, pide aclaración.
+No generes una propuesta aplicable desde el texto normal; esa parte la gestiona el backend mediante pending_action.
 
 IMPORTANTE:
 - No escribas explicaciones demasiado largas.
