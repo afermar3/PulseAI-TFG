@@ -2401,6 +2401,177 @@ def _build_update_sleep_goal_action(
     }
 
 
+def _is_toggle_sleep_goal_request(message: str) -> bool:
+    text = _normalize(message)
+
+    toggle_keywords = [
+        "activa",
+        "activar",
+        "activame",
+        "desactiva",
+        "desactivar",
+        "desactivame",
+    ]
+
+    sleep_goal_keywords = [
+        "objetivo de sueño",
+        "objetivo de sueno",
+        "objetivo sueño",
+        "objetivo sueno",
+        "objetivo de descanso",
+        "descanso",
+        "sueño",
+        "sueno",
+    ]
+
+    has_toggle = any(keyword in text for keyword in toggle_keywords)
+    has_sleep_goal = any(keyword in text for keyword in sleep_goal_keywords)
+
+    return has_toggle and has_sleep_goal
+
+
+def _is_delete_sleep_goal_request(message: str) -> bool:
+    text = _normalize(message)
+
+    delete_keywords = [
+        "elimina",
+        "eliminar",
+        "borra",
+        "borrar",
+        "quita",
+        "quitar",
+    ]
+
+    sleep_goal_keywords = [
+        "objetivo de sueño",
+        "objetivo de sueno",
+        "objetivo sueño",
+        "objetivo sueno",
+        "objetivo de descanso",
+        "descanso",
+        "sueño",
+        "sueno",
+    ]
+
+    has_delete = any(keyword in text for keyword in delete_keywords)
+    has_sleep_goal = any(keyword in text for keyword in sleep_goal_keywords)
+
+    return has_delete and has_sleep_goal
+
+
+def _detect_sleep_goal_enabled_value(message: str) -> Optional[bool]:
+    text = _normalize(message)
+
+    deactivate_keywords = [
+        "desactiva",
+        "desactivar",
+        "desactivame",
+    ]
+
+    activate_keywords = [
+        "activa",
+        "activar",
+        "activame",
+    ]
+
+    if any(keyword in text for keyword in deactivate_keywords):
+        return False
+
+    if any(keyword in text for keyword in activate_keywords):
+        return True
+
+    return None
+
+
+def _build_toggle_sleep_goal_action(
+    message: str,
+) -> Dict[str, Any]:
+    goal_type = _detect_sleep_goal_type(message)
+    enabled = _detect_sleep_goal_enabled_value(message)
+
+    if goal_type is None:
+        return {
+            "type": "missing_sleep_goal_type",
+            "title": "Falta indicar el tipo de objetivo",
+            "description": (
+                "He entendido que quieres activar o desactivar un objetivo de sueño, "
+                "pero necesito saber si es para entre semana, fin de semana o todos los días."
+            ),
+            "requires_confirmation": False,
+            "payload": {
+                "original_message": message,
+            },
+        }
+
+    if enabled is None:
+        return {
+            "type": "missing_sleep_goal_toggle_state",
+            "title": "Falta indicar si quieres activar o desactivar",
+            "description": (
+                "He entendido que quieres cambiar el estado de un objetivo de sueño, "
+                "pero necesito saber si quieres activarlo o desactivarlo."
+            ),
+            "requires_confirmation": False,
+            "payload": {
+                "goal_type": goal_type,
+                "original_message": message,
+            },
+        }
+
+    goal_label = _sleep_goal_type_label(goal_type)
+    action_label = "activar" if enabled else "desactivar"
+
+    return {
+        "type": "toggle_sleep_goal_profile",
+        "title": f"{action_label.capitalize()} objetivo de sueño de {goal_label}",
+        "description": (
+            f"Se va a {action_label} tu objetivo de sueño de {goal_label}."
+        ),
+        "requires_confirmation": True,
+        "payload": {
+            "goal_type": goal_type,
+            "enabled": enabled,
+            "original_message": message,
+        },
+    }
+
+
+def _build_delete_sleep_goal_action(
+    message: str,
+) -> Dict[str, Any]:
+    goal_type = _detect_sleep_goal_type(message)
+
+    if goal_type is None:
+        return {
+            "type": "missing_sleep_goal_type",
+            "title": "Falta indicar el tipo de objetivo",
+            "description": (
+                "He entendido que quieres eliminar un objetivo de sueño, "
+                "pero necesito saber si es para entre semana, fin de semana o todos los días."
+            ),
+            "requires_confirmation": False,
+            "payload": {
+                "original_message": message,
+            },
+        }
+
+    goal_label = _sleep_goal_type_label(goal_type)
+
+    return {
+        "type": "delete_sleep_goal_profile",
+        "title": f"Eliminar objetivo de sueño de {goal_label}",
+        "description": (
+            f"Se eliminará tu objetivo de sueño de {goal_label}. "
+            "Esta acción no se aplicará hasta que la confirmes."
+        ),
+        "requires_confirmation": True,
+        "payload": {
+            "goal_type": goal_type,
+            "original_message": message,
+        },
+    }
+
+
 def _format_schedule_date_for_answer(raw_date: Any) -> str:
     if not raw_date:
         return "Fecha pendiente"
@@ -2543,6 +2714,47 @@ def build_pending_action_answer(
             "",
             "¿Quieres aplicar este objetivo de sueño?",
         ])
+    
+
+    if action_type == "toggle_sleep_goal_profile":
+        goal_type = payload.get("goal_type", "ALL_DAYS")
+        enabled = payload.get("enabled") is True
+
+        goal_label = _sleep_goal_type_label(goal_type)
+        action_label = "activar" if enabled else "desactivar"
+        status_text = "activo" if enabled else "desactivado"
+
+        return "\n".join([
+            f"He preparado una propuesta para {action_label} tu objetivo de sueño.",
+            "",
+            "Propuesta:",
+            f"- Tipo: {goal_label}",
+            f"- Nuevo estado: {status_text}",
+            "",
+            "Importante:",
+            "- No he aplicado todavía el cambio.",
+            "- Si lo confirmas, se actualizará el estado de tu objetivo de sueño.",
+            "",
+            "¿Quieres aplicar este cambio?",
+        ])
+
+    if action_type == "delete_sleep_goal_profile":
+        goal_type = payload.get("goal_type", "ALL_DAYS")
+        goal_label = _sleep_goal_type_label(goal_type)
+
+        return "\n".join([
+            "He preparado una propuesta para eliminar un objetivo de sueño.",
+            "",
+            "Propuesta:",
+            f"- Tipo: {goal_label}",
+            "- Acción: eliminar objetivo",
+            "",
+            "Importante:",
+            "- No he eliminado todavía el objetivo.",
+            "- Si lo confirmas, se borrará de tus objetivos de sueño.",
+            "",
+            "¿Quieres eliminar este objetivo de sueño?",
+        ])
 
     if action_type == "missing_sleep_goal_type":
         return (
@@ -2556,6 +2768,13 @@ def build_pending_action_answer(
             f"{title}\n\n"
             f"{description}\n\n"
             "Ejemplo: “Los fines de semana quiero dormir de 01:00 a 09:30”."
+        )
+    
+    if action_type == "missing_sleep_goal_toggle_state":
+        return (
+            f"{title}\n\n"
+            f"{description}\n\n"
+            "Ejemplo: “Desactiva mi objetivo de fin de semana”."
         )
     
     if action_type == "invalid_sleep_goal_duration":
@@ -2787,6 +3006,16 @@ def detect_pending_action(
     user: User,
     message: str,
 ) -> Optional[Dict[str, Any]]:
+    if _is_delete_sleep_goal_request(message):
+        return _build_delete_sleep_goal_action(
+            message=message,
+        )
+
+    if _is_toggle_sleep_goal_request(message):
+        return _build_toggle_sleep_goal_action(
+            message=message,
+        )
+    
     if _is_update_sleep_goal_request(message):
         return _build_update_sleep_goal_action(
             message=message,

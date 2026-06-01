@@ -366,7 +366,9 @@ class _AiCoachViewState extends State<AiCoachView> {
         type == "replace_exercise" ||
         type == "update_exercise_config" ||
         type == "schedule_workout" ||
-        type == "update_sleep_goal_profile";
+        type == "update_sleep_goal_profile" ||
+        type == "toggle_sleep_goal_profile" ||
+        type == "delete_sleep_goal_profile";
   }
 
   @override
@@ -840,8 +842,13 @@ class _PendingActionCard extends StatelessWidget {
       return "Entrenamiento programado";
     }
 
-    if (type == "update_sleep_goal_profile") {
+    if (type == "update_sleep_goal_profile" ||
+        type == "toggle_sleep_goal_profile") {
       return "Objetivo de sueño actualizado";
+    }
+
+    if (type == "delete_sleep_goal_profile") {
+      return "Objetivo de sueño eliminado";
     }
 
     return "Cambios aplicados";
@@ -854,8 +861,13 @@ class _PendingActionCard extends StatelessWidget {
       return "Esta propuesta ya se ha añadido a tu agenda.";
     }
 
-    if (type == "update_sleep_goal_profile") {
+    if (type == "update_sleep_goal_profile" ||
+        type == "toggle_sleep_goal_profile") {
       return "Esta propuesta ya se ha aplicado a tus objetivos de sueño.";
+    }
+
+    if (type == "delete_sleep_goal_profile") {
+      return "Esta propuesta ya ha eliminado el objetivo de sueño.";
     }
 
     return "Esta propuesta ya se ha añadido a tu rutina.";
@@ -903,6 +915,23 @@ class _PendingActionCard extends StatelessWidget {
       final durationText = _formatMinutes(targetMinutes);
 
       return "$goalLabel · $bedTime - $wakeTime · $durationText";
+    }
+
+    if (type == "toggle_sleep_goal_profile" && payload is Map) {
+      final goalType = payload["goal_type"]?.toString() ?? "";
+      final enabled = payload["enabled"] == true;
+
+      final goalLabel = _formatSleepGoalType(goalType);
+      final stateText = enabled ? "Activar" : "Desactivar";
+
+      return "$goalLabel · $stateText objetivo";
+    }
+
+    if (type == "delete_sleep_goal_profile" && payload is Map) {
+      final goalType = payload["goal_type"]?.toString() ?? "";
+      final goalLabel = _formatSleepGoalType(goalType);
+
+      return "$goalLabel · Eliminar objetivo";
     }
 
     if (type == "add_workout_day" && payload is Map) {
@@ -1007,6 +1036,7 @@ class _PendingActionCard extends StatelessWidget {
         type == "invalid_workout_days" ||
         type == "missing_sleep_goal_type" ||
         type == "missing_sleep_goal_time" ||
+        type == "missing_sleep_goal_toggle_state" ||
         type == "invalid_sleep_goal_duration";
 
     Color cardColor;
@@ -1025,7 +1055,9 @@ class _PendingActionCard extends StatelessWidget {
       cardColor = TColor.primerColor1.withOpacity(0.08);
       iconColor = TColor.primerColor1;
       icon = Icons.event_available_rounded;
-    } else if (type == "update_sleep_goal_profile") {
+    } else if (type == "update_sleep_goal_profile" ||
+        type == "toggle_sleep_goal_profile" ||
+        type == "delete_sleep_goal_profile") {
       cardColor = Colors.indigo.withOpacity(0.08);
       iconColor = Colors.indigo;
       icon = Icons.bedtime_rounded;
@@ -1122,7 +1154,9 @@ class _PendingActionCard extends StatelessWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: type == "schedule_workout"
                               ? TColor.primerColor1
-                              : type == "update_sleep_goal_profile"
+                              : type == "update_sleep_goal_profile" ||
+                                      type == "toggle_sleep_goal_profile" ||
+                                      type == "delete_sleep_goal_profile"
                                   ? Colors.indigo
                                   : TColor.rojo,
                           foregroundColor: Colors.white,

@@ -1311,6 +1311,104 @@ def _apply_update_sleep_goal_profile(
     }
 
 
+def _get_sleep_goal_profile(
+    db: Session,
+    user: User,
+    goal_type: str,
+) -> SleepGoalProfile:
+    goal = (
+        db.query(SleepGoalProfile)
+        .filter(
+            SleepGoalProfile.user_id == user.id,
+            SleepGoalProfile.goal_type == goal_type,
+        )
+        .first()
+    )
+
+    if goal is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No existe ese objetivo de sueño",
+        )
+
+    return goal
+
+
+def _apply_toggle_sleep_goal_profile(
+    db: Session,
+    user: User,
+    pending_action: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = pending_action.get("payload") or {}
+
+    goal_type = str(payload.get("goal_type") or "").upper().strip()
+    enabled = payload.get("enabled") is True
+
+    if goal_type not in VALID_SLEEP_GOAL_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tipo de objetivo de sueño no válido",
+        )
+
+    goal = _get_sleep_goal_profile(
+        db=db,
+        user=user,
+        goal_type=goal_type,
+    )
+
+    goal.enabled = enabled
+
+    db.commit()
+    db.refresh(goal)
+
+    return {
+        "success": True,
+        "sleep_goal_id": goal.id,
+        "goal_type": goal.goal_type,
+        "bed_time": goal.bed_time,
+        "wake_time": goal.wake_time,
+        "target_minutes": goal.target_minutes,
+        "enabled": goal.enabled,
+    }
+
+
+def _apply_delete_sleep_goal_profile(
+    db: Session,
+    user: User,
+    pending_action: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = pending_action.get("payload") or {}
+
+    goal_type = str(payload.get("goal_type") or "").upper().strip()
+
+    if goal_type not in VALID_SLEEP_GOAL_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tipo de objetivo de sueño no válido",
+        )
+
+    goal = _get_sleep_goal_profile(
+        db=db,
+        user=user,
+        goal_type=goal_type,
+    )
+
+    deleted_data = {
+        "success": True,
+        "sleep_goal_id": goal.id,
+        "goal_type": goal.goal_type,
+        "bed_time": goal.bed_time,
+        "wake_time": goal.wake_time,
+        "target_minutes": goal.target_minutes,
+        "enabled": goal.enabled,
+    }
+
+    db.delete(goal)
+    db.commit()
+
+    return deleted_data
+
+
 def apply_pending_action(
     db: Session,
     user: User,
@@ -1343,6 +1441,41 @@ def apply_pending_action(
             user=user,
             pending_action=pending_action,
         )
+    
+    if action_type == "toggle_sleep_goal_profile":
+        data = _apply_toggle_sleep_goal_profile(
+            db=db,
+            user=user,
+            pending_action=pending_action,
+        )
+
+        enabled = data.get("enabled") is True
+
+        if enabled:
+            message = "El objetivo de sueño se ha activado correctamente."
+        else:
+            message = "El objetivo de sueño se ha desactivado correctamente."
+
+        return {
+            "success": True,
+            "message": message,
+            "action_type": action_type,
+            "data": data,
+        }
+
+    if action_type == "delete_sleep_goal_profile":
+        data = _apply_delete_sleep_goal_profile(
+            db=db,
+            user=user,
+            pending_action=pending_action,
+        )
+
+        return {
+            "success": True,
+            "message": "El objetivo de sueño se ha eliminado correctamente.",
+            "action_type": action_type,
+            "data": data,
+        }
 
         return {
             "success": True,
