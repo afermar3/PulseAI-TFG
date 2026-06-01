@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.database.database import Base, engine
 from app.routers import (
@@ -15,13 +18,25 @@ from app.routers import (
     sleep_router,
     sleep_goal_router,
     sleep_goal_profile_router,
+    progress_photo_router,
 )
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="PulseAI API",
     version="1.0.0",
     description="Backend de PulseAI desarrollado con FastAPI",
+)
+
+uploads_dir = Path(__file__).resolve().parents[1] / "uploads"
+uploads_dir.mkdir(parents=True, exist_ok=True)
+
+
+app.mount(
+    "/uploads",
+    StaticFiles(directory=str(uploads_dir)),
+    name="uploads",
 )
 
 app.add_middleware(
@@ -44,6 +59,8 @@ app.include_router(workout_progress_router.router)
 app.include_router(sleep_router.router)
 app.include_router(sleep_goal_router.router)
 app.include_router(sleep_goal_profile_router.router)
+app.include_router(progress_photo_router.router)
+
 
 @app.get("/")
 def root():

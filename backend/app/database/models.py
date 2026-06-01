@@ -1,6 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 
 from app.database.database import Base
@@ -52,10 +62,16 @@ class User(Base):
         "SleepGoalProfile",
         back_populates="user",
         cascade="all, delete-orphan",
-    )   
+    )
 
     ai_chat_messages = relationship(
         "AiChatMessage",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    progress_photos = relationship(
+        "ProgressPhoto",
         back_populates="user",
         cascade="all, delete-orphan",
     )
@@ -160,8 +176,8 @@ class SleepGoal(Base):
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    bed_time = Column(String, nullable=False)   # formato HH:MM
-    wake_time = Column(String, nullable=False)  # formato HH:MM
+    bed_time = Column(String, nullable=False)
+    wake_time = Column(String, nullable=False)
 
     target_minutes = Column(Integer, nullable=False)
 
@@ -196,8 +212,8 @@ class SleepGoalProfile(Base):
     goal_type = Column(String, nullable=False)
     # ALL_DAYS / WEEKDAYS / WEEKENDS
 
-    bed_time = Column(String, nullable=False)   # HH:MM
-    wake_time = Column(String, nullable=False)  # HH:MM
+    bed_time = Column(String, nullable=False)
+    wake_time = Column(String, nullable=False)
 
     target_minutes = Column(Integer, nullable=False)
 
@@ -350,7 +366,7 @@ class AiChatMessage(Base):
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    role = Column(String, nullable=False)  # user / assistant
+    role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
 
     pending_action_json = Column(Text, nullable=True)
@@ -358,3 +374,23 @@ class AiChatMessage(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="ai_chat_messages")
+
+
+class ProgressPhoto(Base):
+    __tablename__ = "progress_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    image_path = Column(String, nullable=False)
+
+    photo_type = Column(String, nullable=False)
+    # FRONT / SIDE / BACK / OTHER
+
+    weight_kg = Column(Float, nullable=True)
+    note = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="progress_photos")

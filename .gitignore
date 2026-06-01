@@ -53,3 +53,7 @@ backend/pulseai.db
 
 backend/app/generated_images/
 backend/generated_images/
+
+# Uploaded files / user content
+backend/uploads/*
+!backend/uploads/.gitkeep
