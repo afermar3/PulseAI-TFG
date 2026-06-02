@@ -719,7 +719,8 @@ Future<void> _loadUpcomingScheduledWorkouts() async {
                     const SizedBox(height: 26),
                     _buildSectionHeader(
                       title: "Próximos entrenamientos",
-                      actionText: "Agenda",
+                      actionText: "Ver agenda",
+                      actionIcon: Icons.calendar_month_rounded,
                       onTap: _openSchedule,
                     ),
                     const SizedBox(height: 12),
@@ -1270,10 +1271,9 @@ Widget _buildStatsShortcutCard() {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader(
-          title: hasActiveDays
-              ? "Días de tu rutina activa"
-              : "¿Qué quieres entrenar?",
-          actionText: "IA",
+          title: hasActiveDays ? "Días de la rutina" : "¿Qué quieres entrenar?",
+          actionText: "Rutina IA",
+          actionIcon: Icons.auto_awesome_rounded,
           onTap: () {
             Navigator.push(
               context,
@@ -1349,36 +1349,65 @@ Widget _buildStatsShortcutCard() {
   }
 
   Widget _buildSectionHeader({
-    required String title,
-    required String actionText,
-    required VoidCallback onTap,
-  }) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: TextStyle(
-              color: TColor.black,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
+  required String title,
+  required String actionText,
+  required VoidCallback onTap,
+  IconData? actionIcon,
+}) {
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      Expanded(
+        child: Text(
+          title,
+          style: TextStyle(
+            color: TColor.black,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
           ),
         ),
-        TextButton(
-          onPressed: onTap,
-          child: Text(
-            actionText,
-            style: TextStyle(
-              color: TColor.primaryColor1,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
+      ),
+      InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 8,
+          ),
+          decoration: BoxDecoration(
+            color: TColor.primaryColor1.withOpacity(0.09),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: TColor.primaryColor1.withOpacity(0.16),
             ),
           ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (actionIcon != null) ...[
+                Icon(
+                  actionIcon,
+                  color: TColor.primaryColor1,
+                  size: 15,
+                ),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                actionText,
+                style: TextStyle(
+                  color: TColor.primaryColor1,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
+}
 }
 
 class _WeeklyChart extends StatelessWidget {
