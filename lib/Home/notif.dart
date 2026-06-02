@@ -1,4 +1,7 @@
+import 'package:afermar3_tf_ipc/services/progress_photo_service.dart';
 import 'package:afermar3_tf_ipc/services/scheduled_workout_service.dart';
+import 'package:afermar3_tf_ipc/services/sleep_goal_service.dart';
+import 'package:afermar3_tf_ipc/services/sleep_service.dart';
 import 'package:afermar3_tf_ipc/services/workout_session_service.dart';
 import 'package:flutter/material.dart';
 
@@ -28,12 +31,38 @@ class _NotificationViewState extends State<NotificationView> {
       final scheduled = await ScheduledWorkoutService.getMyScheduledWorkouts();
       final sessions = await WorkoutSessionService.getMyWorkoutSessions();
 
+      Map<String, dynamic>? activeSleep;
+      Map<String, dynamic>? latestSleep;
+      Map<String, dynamic>? effectiveSleepGoal;
+      List<Map<String, dynamic>> progressPhotos = [];
+
+      try {
+        activeSleep = await SleepService.getActiveSleepSession();
+      } catch (_) {}
+
+      try {
+        latestSleep = await SleepService.getLatestSleepSession();
+      } catch (_) {}
+
+      try {
+        effectiveSleepGoal =
+            await SleepGoalService.getEffectiveSleepGoalToday();
+      } catch (_) {}
+
+      try {
+        progressPhotos = await ProgressPhotoService.getMyProgressPhotos();
+      } catch (_) {}
+
       if (!mounted) return;
 
       setState(() {
         _notifications = _buildDynamicNotifications(
           scheduledWorkouts: scheduled,
           workoutSessions: sessions,
+          activeSleepSession: activeSleep,
+          latestSleepSession: latestSleep,
+          effectiveSleepGoal: effectiveSleepGoal,
+          progressPhotos: progressPhotos,
         );
         _errorMessage = null;
         _isLoading = false;
@@ -52,6 +81,10 @@ class _NotificationViewState extends State<NotificationView> {
   List<Map<String, dynamic>> _buildDynamicNotifications({
     required List<dynamic> scheduledWorkouts,
     required List<dynamic> workoutSessions,
+    required Map<String, dynamic>? activeSleepSession,
+    required Map<String, dynamic>? latestSleepSession,
+    required Map<String, dynamic>? effectiveSleepGoal,
+    required List<Map<String, dynamic>> progressPhotos,
   }) {
     final notifications = <Map<String, dynamic>>[];
 
@@ -60,6 +93,39 @@ class _NotificationViewState extends State<NotificationView> {
     final weekStart = today.subtract(Duration(days: today.weekday - 1));
     final weekEnd = weekStart.add(const Duration(days: 7));
 
+    _addWorkoutNotifications(
+      notifications: notifications,
+      scheduledWorkouts: scheduledWorkouts,
+      workoutSessions: workoutSessions,
+      today: today,
+      weekStart: weekStart,
+      weekEnd: weekEnd,
+    );
+
+    _addSleepNotifications(
+      notifications: notifications,
+      activeSleepSession: activeSleepSession,
+      latestSleepSession: latestSleepSession,
+      effectiveSleepGoal: effectiveSleepGoal,
+      today: today,
+    );
+
+    _addProgressPhotoNotifications(
+      notifications: notifications,
+      progressPhotos: progressPhotos,
+    );
+
+    return notifications;
+  }
+
+  void _addWorkoutNotifications({
+    required List<Map<String, dynamic>> notifications,
+    required List<dynamic> scheduledWorkouts,
+    required List<dynamic> workoutSessions,
+    required DateTime today,
+    required DateTime weekStart,
+    required DateTime weekEnd,
+  }) {
     final todayScheduled = <Map<String, dynamic>>[];
     int weeklyScheduled = 0;
     int weeklyCompletedScheduled = 0;
@@ -189,7 +255,8 @@ class _NotificationViewState extends State<NotificationView> {
     notifications.add({
       "type": "weekly_summary",
       "title": "Resumen semanal",
-      "message": "$weeklySessions sesiones completadas · $weeklyMinutes minutos entrenados.",
+      "message":
+          "$weeklySessions sesiones completadas · $weeklyMinutes minutos entrenados.",
       "time": "Esta semana",
       "icon": Icons.show_chart_rounded,
       "color": const Color(0xffC00000),
@@ -236,8 +303,204 @@ class _NotificationViewState extends State<NotificationView> {
         "payload": null,
       });
     }
+  }
 
-    return notifications;
+  void _addSleepNotifications({
+    required List<Map<String, dynamic>> notifications,
+    required Map<String, dynamic>? activeSleepSession,
+    required Map<String, dynamic>? latestSleepSession,
+    required Map<String, dynamic>? effectiveSleepGoal,
+    required DateTime today,
+  }) {
+    if (activeSleepSession != null) {
+      final startTime = _parseDate(activeSleepSession["start_time"]);
+
+      notifications.add({
+        "type": "sleep_active",
+        "title": "Sueño en curso",
+        "message": startTime == null
+            ? "Tienes una sesión de sueño activa."
+            : "Empezaste a dormir ${_formatRelativeTime(startTime).toLowerCase()}.",
+        "time": "Ahora",
+        "icon": Icons.bedtime_rounded,
+        "color": Colors.indigo,
+        "payload": activeSleepSession,
+      });
+
+      return;
+    }
+
+    if (latestSleepSession != null) {
+      final endTime = _parseDate(latestSleepSession["end_time"]);
+      final startTime = _parseDate(latestSleepSession["start_time"]);
+      final duration = _toInt(latestSleepSession["duration_minutes"]);
+
+      final referenceDate = endTime ?? startTime;
+
+      if (referenceDate != null) {
+        final sleepDay = DateTime(
+          referenceDate.year,
+          referenceDate.month,
+          referenceDate.day,
+        );
+
+        if (_isSameDay(sleepDay, today)) {
+          notifications.add({
+            "type": "sleep_today",
+            "title": "Sueño registrado hoy",
+            "message": duration != null && duration > 0
+                ? "Has dormido ${_formatMinutesAsHours(duration)}."
+                : "Has registrado una sesión de sueño hoy.",
+            "time": "Hoy",
+            "icon": Icons.hotel_rounded,
+            "color": Colors.indigo,
+            "payload": latestSleepSession,
+          });
+        } else {
+          notifications.add({
+            "type": "sleep_latest",
+            "title": "Último sueño registrado",
+            "message": duration != null && duration > 0
+                ? "Tu último sueño fue de ${_formatMinutesAsHours(duration)}."
+                : "Tienes una sesión de sueño registrada anteriormente.",
+            "time": _formatRelativeTime(referenceDate),
+            "icon": Icons.nights_stay_rounded,
+            "color": Colors.indigo,
+            "payload": latestSleepSession,
+          });
+        }
+      }
+    } else {
+      notifications.add({
+        "type": "sleep_empty",
+        "title": "Sin registros de sueño",
+        "message":
+            "Cuando te vayas a dormir, pulsa iniciar sueño para registrar tu descanso.",
+        "time": "Hoy",
+        "icon": Icons.bedtime_outlined,
+        "color": Colors.indigo,
+        "payload": null,
+      });
+    }
+
+    final goal = _extractEffectiveGoal(effectiveSleepGoal);
+
+    if (goal != null) {
+      final bedTime = goal["bed_time"]?.toString() ?? "--:--";
+      final wakeTime = goal["wake_time"]?.toString() ?? "--:--";
+      final targetMinutes = _toInt(goal["target_minutes"]);
+      final goalType = goal["goal_type"]?.toString() ?? "";
+
+      notifications.add({
+        "type": "sleep_goal_today",
+        "title": "Objetivo de sueño de hoy",
+        "message":
+            "${SleepGoalService.goalTypeLabel(goalType)} · $bedTime - $wakeTime · ${_formatMinutesAsHours(targetMinutes ?? 0)}.",
+        "time": "Hoy",
+        "icon": Icons.alarm_rounded,
+        "color": Colors.indigo,
+        "payload": goal,
+      });
+    }
+  }
+
+  void _addProgressPhotoNotifications({
+    required List<Map<String, dynamic>> notifications,
+    required List<Map<String, dynamic>> progressPhotos,
+  }) {
+    if (progressPhotos.isEmpty) {
+      notifications.add({
+        "type": "progress_photo_empty",
+        "title": "Añade tu primera foto",
+        "message":
+            "Registra una foto de progreso para comparar tu evolución física.",
+        "time": "Evolución",
+        "icon": Icons.photo_camera_rounded,
+        "color": Colors.purple,
+        "payload": null,
+      });
+
+      return;
+    }
+
+    final parsedPhotos = progressPhotos.map((photo) {
+      final copy = Map<String, dynamic>.from(photo);
+      copy["_created_at_parsed"] = _parseDate(copy["created_at"]);
+      return copy;
+    }).toList();
+
+    parsedPhotos.sort((a, b) {
+      final aDate = a["_created_at_parsed"] as DateTime?;
+      final bDate = b["_created_at_parsed"] as DateTime?;
+
+      if (aDate == null && bDate == null) return 0;
+      if (aDate == null) return 1;
+      if (bDate == null) return -1;
+
+      return bDate.compareTo(aDate);
+    });
+
+    final latestPhoto = parsedPhotos.first;
+    final latestDate = latestPhoto["_created_at_parsed"] as DateTime?;
+    final totalPhotos = progressPhotos.length;
+
+    notifications.add({
+      "type": "progress_photo_summary",
+      "title": "Fotos de progreso",
+      "message": totalPhotos == 1
+          ? "Tienes 1 foto registrada. Añade otra para comparar tu evolución."
+          : "Tienes $totalPhotos fotos registradas para comparar tu evolución.",
+      "time": "Evolución",
+      "icon": Icons.photo_library_rounded,
+      "color": Colors.purple,
+      "payload": null,
+    });
+
+    if (latestDate != null) {
+      final daysSince = DateTime.now().difference(latestDate).inDays;
+
+      if (daysSince >= 14) {
+        notifications.add({
+          "type": "progress_photo_reminder",
+          "title": "Actualiza tu foto de progreso",
+          "message":
+              "Hace $daysSince días que no subes una foto. Añade una nueva para ver tu evolución.",
+          "time": _formatRelativeTime(latestDate),
+          "icon": Icons.add_a_photo_rounded,
+          "color": Colors.purple,
+          "payload": latestPhoto,
+        });
+      } else {
+        notifications.add({
+          "type": "progress_photo_latest",
+          "title": "Última foto de progreso",
+          "message":
+              "${_photoTypeLabel(latestPhoto["photo_type"]?.toString())} registrada ${_formatRelativeTime(latestDate).toLowerCase()}.",
+          "time": _formatRelativeTime(latestDate),
+          "icon": Icons.image_rounded,
+          "color": Colors.purple,
+          "payload": latestPhoto,
+        });
+      }
+    }
+  }
+
+  Map<String, dynamic>? _extractEffectiveGoal(Map<String, dynamic>? response) {
+    if (response == null) return null;
+
+    if (response["goal"] is Map) {
+      return Map<String, dynamic>.from(response["goal"] as Map);
+    }
+
+    if (response["sleep_goal"] is Map) {
+      return Map<String, dynamic>.from(response["sleep_goal"] as Map);
+    }
+
+    if (response["bed_time"] != null && response["wake_time"] != null) {
+      return response;
+    }
+
+    return null;
   }
 
   DateTime? _parseDate(dynamic value) {
@@ -271,6 +534,25 @@ class _NotificationViewState extends State<NotificationView> {
     }
 
     return "$duration min";
+  }
+
+  String _formatMinutesAsHours(int minutes) {
+    if (minutes <= 0) {
+      return "duración no definida";
+    }
+
+    final hours = minutes ~/ 60;
+    final mins = minutes % 60;
+
+    if (hours <= 0) {
+      return "${mins}min";
+    }
+
+    if (mins == 0) {
+      return "${hours}h";
+    }
+
+    return "${hours}h ${mins}min";
   }
 
   String _formatWorkoutTitle(Map<String, dynamic> item) {
@@ -307,6 +589,21 @@ class _NotificationViewState extends State<NotificationView> {
         : "$completedExercises ejercicios";
 
     return "$exercisesText · $duration min";
+  }
+
+  String _photoTypeLabel(String? value) {
+    switch (value) {
+      case "FRONT":
+        return "frontal";
+      case "SIDE":
+        return "lateral";
+      case "BACK":
+        return "de espalda";
+      case "OTHER":
+        return "personal";
+      default:
+        return "de progreso";
+    }
   }
 
   String _formatRelativeTime(DateTime date) {
@@ -525,7 +822,7 @@ class _NotificationViewState extends State<NotificationView> {
                 leading: const Icon(Icons.info_outline_rounded),
                 title: const Text("Información"),
                 subtitle: const Text(
-                  "Estas notificaciones se generan a partir de tu agenda y sesiones reales.",
+                  "Estas notificaciones se generan con tu agenda, entrenamientos, sueño y fotos de progreso.",
                 ),
                 onTap: () {
                   Navigator.pop(context);
@@ -621,9 +918,7 @@ class _NotificationViewState extends State<NotificationView> {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-
                     const SizedBox(height: 6),
-
                     Text(
                       _errorMessage != null
                           ? "No se han podido cargar las notificaciones"
@@ -634,9 +929,7 @@ class _NotificationViewState extends State<NotificationView> {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-
                     const SizedBox(height: 22),
-
                     if (_errorMessage != null)
                       _ErrorNotificationCard(
                         message: _errorMessage!,
@@ -883,7 +1176,7 @@ class _EmptyNotificationCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            "Cuando tengas entrenamientos, sesiones o avisos importantes aparecerán aquí.",
+            "Cuando tengas entrenamientos, sueño, fotos o avisos importantes aparecerán aquí.",
             textAlign: TextAlign.center,
             style: TextStyle(
               color: TColor.gray,

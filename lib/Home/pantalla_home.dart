@@ -2,6 +2,8 @@ import 'package:afermar3_tf_ipc/Home/notif.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/services/profile_service.dart';
 import 'package:afermar3_tf_ipc/services/scheduled_workout_service.dart';
+import 'package:afermar3_tf_ipc/services/sleep_goal_service.dart';
+import 'package:afermar3_tf_ipc/services/sleep_service.dart';
 import 'package:afermar3_tf_ipc/services/workout_plan_service.dart';
 import 'package:afermar3_tf_ipc/services/workout_session_service.dart';
 import 'package:afermar3_tf_ipc/workout_tracker/exercise_library_view.dart';
@@ -53,6 +55,18 @@ class _Homepantalla extends State<Home> {
 
   int _touchedChartIndex = -1;
 
+  List<dynamic> _sleepSessions = [];
+  Map<String, dynamic>? _effectiveSleepGoal;
+  Map<String, dynamic>? _latestSleepSession;
+
+  List<double> _weeklySleepMinutesByDay = List.filled(7, 0);
+
+  int _weeklySleepMinutes = 0;
+  int _weeklySleepDays = 0;
+  int _sleepGoalMinutes = 480;
+
+  int _touchedSleepChartIndex = -1;
+
   @override
   void initState() {
     super.initState();
@@ -65,6 +79,21 @@ class _Homepantalla extends State<Home> {
       final scheduled = await ScheduledWorkoutService.getMyScheduledWorkouts();
       final sessions = await WorkoutSessionService.getMyWorkoutSessions();
       final activePlan = await WorkoutPlanService.getActiveWorkoutPlan();
+
+      List<dynamic> sleepSessions = [];
+      Map<String, dynamic>? effectiveSleepGoal;
+
+      try {
+        sleepSessions = await SleepService.getMySleepSessions();
+      } catch (_) {
+        sleepSessions = [];
+      }
+
+      try {
+        effectiveSleepGoal = await SleepGoalService.getEffectiveSleepGoalToday();
+      } catch (_) {
+        effectiveSleepGoal = null;
+      }
 
       int streakDays = 0;
 
@@ -82,11 +111,14 @@ class _Homepantalla extends State<Home> {
         _activeWorkoutPlan = activePlan;
         _scheduledWorkouts = scheduled;
         _workoutSessions = sessions;
+        _sleepSessions = sleepSessions;
+        _effectiveSleepGoal = effectiveSleepGoal;
         _streakDays = streakDays;
         _errorMessage = null;
 
         _calculateBmi();
         _processActivityData();
+        _processSleepData();
 
         _isLoading = false;
       });
@@ -252,6 +284,181 @@ class _Homepantalla extends State<Home> {
     if (parsedSessions.isNotEmpty) {
       _lastSession = parsedSessions.first;
     }
+  }
+
+  void _processSleepData() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final weekStart = today.subtract(Duration(days: today.weekday - 1));
+    final weekEnd = weekStart.add(const Duration(days: 7));
+
+    _weeklySleepMinutesByDay = List.filled(7, 0);
+    _weeklySleepMinutes = 0;
+    _weeklySleepDays = 0;
+    _latestSleepSession = null;
+    _sleepGoalMinutes = _extractSleepGoalMinutes();
+
+    final parsedSessions = <Map<String, dynamic>>[];
+    final sleepDays = <String>{};
+
+    for (final item in _sleepSessions) {
+      if (item is! Map) continue;
+
+      final session = Map<String, dynamic>.from(item);
+
+      final startTime = _parseDate(session["start_time"]);
+      final endTime = _parseDate(session["end_time"]);
+
+      final referenceDate = endTime ?? startTime;
+
+      if (referenceDate == null) continue;
+
+      session["_sleep_reference_date"] = referenceDate;
+      parsedSessions.add(session);
+
+      final sessionDay = DateTime(
+        referenceDate.year,
+        referenceDate.month,
+        referenceDate.day,
+      );
+
+      final duration = _toInt(session["duration_minutes"]) ?? 0;
+
+      if (!sessionDay.isBefore(weekStart) && sessionDay.isBefore(weekEnd)) {
+        final index = referenceDate.weekday - 1;
+
+        if (index >= 0 && index < 7 && duration > 0) {
+          _weeklySleepMinutesByDay[index] += duration.toDouble();
+          _weeklySleepMinutes += duration;
+
+          sleepDays.add(
+            "${sessionDay.year}-${sessionDay.month}-${sessionDay.day}",
+          );
+        }
+      }
+    }
+
+    _weeklySleepDays = sleepDays.length;
+
+    parsedSessions.sort((a, b) {
+      final aDate = a["_sleep_reference_date"] as DateTime;
+      final bDate = b["_sleep_reference_date"] as DateTime;
+
+      return bDate.compareTo(aDate);
+    });
+
+    if (parsedSessions.isNotEmpty) {
+      _latestSleepSession = parsedSessions.first;
+    }
+  }
+
+  Map<String, dynamic>? _extractEffectiveSleepGoal() {
+    final response = _effectiveSleepGoal;
+
+    if (response == null) return null;
+
+    if (response["goal"] is Map) {
+      return Map<String, dynamic>.from(response["goal"] as Map);
+    }
+
+    if (response["sleep_goal"] is Map) {
+      return Map<String, dynamic>.from(response["sleep_goal"] as Map);
+    }
+
+    if (response["bed_time"] != null && response["wake_time"] != null) {
+      return response;
+    }
+
+    return null;
+  }
+
+  int _extractSleepGoalMinutes() {
+    final goal = _extractEffectiveSleepGoal();
+
+    final target = _toInt(goal?["target_minutes"]);
+
+    if (target != null && target > 0) {
+      return target;
+    }
+
+    return 480;
+  }
+
+  int _averageSleepMinutes() {
+    if (_weeklySleepDays <= 0) return 0;
+
+    return (_weeklySleepMinutes / _weeklySleepDays).round();
+  }
+
+  int _sleepGoalPercentage() {
+    if (_sleepGoalMinutes <= 0) return 0;
+
+    final average = _averageSleepMinutes();
+
+    final percentage = ((average / _sleepGoalMinutes) * 100).round();
+
+    return percentage.clamp(0, 100);
+  }
+
+  String _formatSleepDuration(int minutes) {
+    if (minutes <= 0) {
+      return "0min";
+    }
+
+    final hours = minutes ~/ 60;
+    final mins = minutes % 60;
+
+    if (hours <= 0) {
+      return "${mins}min";
+    }
+
+    if (mins == 0) {
+      return "${hours}h";
+    }
+
+    return "${hours}h ${mins}min";
+  }
+
+  String _sleepGoalScheduleText() {
+    final goal = _extractEffectiveSleepGoal();
+
+    if (goal == null) {
+      return "Objetivo recomendado · 8h";
+    }
+
+    final bedTime = goal["bed_time"]?.toString() ?? "--:--";
+    final wakeTime = goal["wake_time"]?.toString() ?? "--:--";
+    final goalType = goal["goal_type"]?.toString() ?? "";
+
+    return "${SleepGoalService.goalTypeLabel(goalType)} · $bedTime - $wakeTime";
+  }
+
+  String _sleepSubtitleText() {
+    if (_weeklySleepDays <= 0) {
+      return "Aún no hay registros de sueño esta semana.";
+    }
+
+    return "Media semanal: ${_formatSleepDuration(_averageSleepMinutes())} · Objetivo: ${_formatSleepDuration(_sleepGoalMinutes)}";
+  }
+
+  String _latestSleepText() {
+    if (_latestSleepSession == null) {
+      return "Sin sueño registrado";
+    }
+
+    final duration = _toInt(_latestSleepSession?["duration_minutes"]) ?? 0;
+    final referenceDate = _latestSleepSession?["_sleep_reference_date"];
+
+    if (duration <= 0) {
+      return "Último registro pendiente de duración";
+    }
+
+    if (referenceDate is DateTime) {
+      return "${_formatSleepDuration(duration)} · ${_formatDate(referenceDate)}";
+    }
+
+    return _formatSleepDuration(duration);
   }
 
   DateTime? _parseDate(dynamic value) {
@@ -678,7 +885,9 @@ class _Homepantalla extends State<Home> {
     );
   }
 
-  void _showSleepComingSoon() {
+  void _showSleepDetails() {
+    final goal = _extractEffectiveSleepGoal();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -703,19 +912,37 @@ class _Homepantalla extends State<Home> {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                "Esta función se puede añadir más adelante como un registro manual.",
-                style: TextStyle(
-                  color: TColor.gris,
-                  fontSize: 13,
-                  height: 1.4,
-                  fontWeight: FontWeight.w500,
-                ),
+              const SizedBox(height: 16),
+              _DetailRow(
+                icon: Icons.bedtime_rounded,
+                title: "Media semanal",
+                value: _weeklySleepDays > 0
+                    ? _formatSleepDuration(_averageSleepMinutes())
+                    : "Sin registros esta semana",
               ),
               const SizedBox(height: 12),
+              _DetailRow(
+                icon: Icons.flag_rounded,
+                title: "Objetivo",
+                value: _formatSleepDuration(_sleepGoalMinutes),
+              ),
+              const SizedBox(height: 12),
+              _DetailRow(
+                icon: Icons.alarm_rounded,
+                title: "Horario",
+                value: _sleepGoalScheduleText(),
+              ),
+              const SizedBox(height: 12),
+              _DetailRow(
+                icon: Icons.history_rounded,
+                title: "Último sueño",
+                value: _latestSleepText(),
+              ),
+              const SizedBox(height: 18),
               Text(
-                "Idea: pulsar “Me voy a dormir” al acostarte y “Me he despertado” al levantarte. Con eso la app podría calcular tus horas reales de descanso.",
+                goal == null
+                    ? "No tienes un objetivo personalizado activo para hoy. Se usa una referencia recomendada de 8 horas."
+                    : "Estos datos se calculan a partir de tus sesiones de sueño registradas y tu objetivo efectivo de hoy.",
                 style: TextStyle(
                   color: TColor.gris,
                   fontSize: 13,
@@ -735,7 +962,8 @@ class _Homepantalla extends State<Home> {
     final completed = _goalCompletedWorkouts();
     final percentage = _goalPercentage();
     final missing = target - completed;
-    final periodText = _selectedPeriod == "Mensual" ? "este mes" : "esta semana";
+    final periodText =
+        _selectedPeriod == "Mensual" ? "este mes" : "esta semana";
 
     String title;
     String explanation;
@@ -939,7 +1167,8 @@ class _Homepantalla extends State<Home> {
     final completedAt = session["_completed_at_parsed"] as DateTime?;
     final title = _formatSessionTitle(session);
     final subtitle = _formatSessionSubtitle(session);
-    final workoutTitle = session["workout_title"]?.toString() ?? "Entrenamiento";
+    final workoutTitle =
+        session["workout_title"]?.toString() ?? "Entrenamiento";
     final dateText =
         completedAt == null ? "Fecha no disponible" : _formatDate(completedAt);
 
@@ -1091,7 +1320,7 @@ class _Homepantalla extends State<Home> {
                       const SizedBox(height: 14),
                       _buildProgressChart(media),
                       const SizedBox(height: 24),
-                      _buildSleepPlaceholder(),
+                      _buildSleepChart(media),
                       const SizedBox(height: 24),
                       _buildLastSessionHeader(),
                       const SizedBox(height: 12),
@@ -1797,78 +2026,318 @@ class _Homepantalla extends State<Home> {
     );
   }
 
-  Widget _buildSleepPlaceholder() {
+  Widget _buildSleepChart(Size media) {
+    final values = _weeklySleepMinutesByDay;
+
+    final maxMinutes = values.fold<double>(
+      0,
+      (previous, current) {
+        return current > previous ? current : previous;
+      },
+    );
+
+    final goalAsDouble = _sleepGoalMinutes.toDouble();
+
+    final chartMaxY = [
+          maxMinutes,
+          goalAsDouble,
+          480.0,
+        ].reduce((a, b) => a > b ? a : b) +
+        60;
+
     return InkWell(
       borderRadius: BorderRadius.circular(24),
-      onTap: _showSleepComingSoon,
+      onTap: _showSleepDetails,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: TColor.blanco,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: Colors.grey.shade100,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.055),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+        decoration: _cardDecoration(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: TColor.rojo.withOpacity(0.10),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(
-                Icons.nightlight_round,
-                color: TColor.rojo,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Seguimiento de sueño",
-                    style: TextStyle(
-                      color: TColor.negro,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                    ),
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "Próximamente: registrar hora de dormir y despertar.",
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: TColor.gris,
+                  child: const Icon(
+                    Icons.bedtime_rounded,
+                    color: Colors.indigo,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Sueño semanal",
+                        style: TextStyle(
+                          color: TColor.negro,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _sleepSubtitleText(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: TColor.gris,
+                          fontSize: 12,
+                          height: 1.25,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  height: 34,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    "${_sleepGoalPercentage()}%",
+                    style: const TextStyle(
+                      color: Colors.indigo,
                       fontSize: 12,
-                      height: 1.25,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _SleepMiniStat(
+                    icon: Icons.nights_stay_rounded,
+                    label: "Media",
+                    value: _weeklySleepDays > 0
+                        ? _formatSleepDuration(_averageSleepMinutes())
+                        : "--",
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _SleepMiniStat(
+                    icon: Icons.flag_rounded,
+                    label: "Objetivo",
+                    value: _formatSleepDuration(_sleepGoalMinutes),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _SleepMiniStat(
+                    icon: Icons.calendar_month_rounded,
+                    label: "Días",
+                    value: "$_weeklySleepDays/7",
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              height: media.width * 0.42,
+              child: BarChart(
+                BarChartData(
+                  maxY: chartMaxY,
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      tooltipBorderRadius: BorderRadius.circular(12),
+                      tooltipPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        final label = _weekdayName(group.x);
+                        final safeIndex = group.x.clamp(
+                          0,
+                          values.length - 1,
+                        );
+                        final realValue = values[safeIndex].round();
+
+                        return BarTooltipItem(
+                          "$label\n",
+                          const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: _formatSleepDuration(realValue),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    touchCallback: (FlTouchEvent event, barTouchResponse) {
+                      setState(() {
+                        if (!event.isInterestedForInteractions ||
+                            barTouchResponse == null ||
+                            barTouchResponse.spot == null) {
+                          _touchedSleepChartIndex = -1;
+                          return;
+                        }
+
+                        _touchedSleepChartIndex =
+                            barTouchResponse.spot!.touchedBarGroupIndex;
+                      });
+                    },
+                  ),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    rightTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 34,
+                        getTitlesWidget: _sleepBottomTitleWidgets,
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  gridData: FlGridData(show: false),
+                  barGroups: List.generate(values.length, (index) {
+                    final value = values[index];
+
+                    return _makeSleepChartGroup(
+                      index,
+                      value,
+                      chartMaxY: chartMaxY,
+                      isTouched: index == _touchedSleepChartIndex,
+                    );
+                  }),
+                ),
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              color: TColor.gris,
-              size: 15,
+            const SizedBox(height: 8),
+            Text(
+              _sleepGoalScheduleText(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: TColor.gris,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  BarChartGroupData _makeSleepChartGroup(
+    int x,
+    double y, {
+    required double chartMaxY,
+    bool isTouched = false,
+  }) {
+    final safeValue = y <= 0 ? 10.0 : y;
+    final touchedValue = isTouched ? safeValue + 15 : safeValue;
+
+    return BarChartGroupData(
+      x: x,
+      barRods: [
+        BarChartRodData(
+          toY: touchedValue.clamp(0, chartMaxY).toDouble(),
+          gradient: LinearGradient(
+            colors: y <= 0
+                ? [
+                    Colors.grey.shade200,
+                    Colors.grey.shade100,
+                  ]
+                : [
+                    Colors.indigo.withOpacity(0.95),
+                    Colors.indigo.shade900,
+                  ],
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+          ),
+          width: 22,
+          borderRadius: BorderRadius.circular(10),
+          borderSide: isTouched
+              ? const BorderSide(
+                  color: Colors.indigo,
+                  width: 1.5,
+                )
+              : BorderSide.none,
+          backDrawRodData: BackgroundBarChartRodData(
+            show: true,
+            toY: chartMaxY,
+            color: Colors.grey.shade100,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sleepBottomTitleWidgets(double value, TitleMeta meta) {
+    final style = TextStyle(
+      color: TColor.gris,
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+    );
+
+    Widget text;
+
+    switch (value.toInt()) {
+      case 0:
+        text = Text("Lun", style: style);
+        break;
+      case 1:
+        text = Text("Mar", style: style);
+        break;
+      case 2:
+        text = Text("Mié", style: style);
+        break;
+      case 3:
+        text = Text("Jue", style: style);
+        break;
+      case 4:
+        text = Text("Vie", style: style);
+        break;
+      case 5:
+        text = Text("Sáb", style: style);
+        break;
+      case 6:
+        text = Text("Dom", style: style);
+        break;
+      default:
+        text = const Text("");
+        break;
+    }
+
+    return SideTitleWidget(
+      meta: meta,
+      space: 14,
+      child: text,
     );
   }
 
@@ -2099,6 +2568,67 @@ class _DashboardStatCard extends StatelessWidget {
               color: TColor.gris,
               fontSize: 9,
               fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SleepMiniStat extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _SleepMiniStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 82,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.indigo.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.indigo.withOpacity(0.08),
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: Colors.indigo,
+            size: 19,
+          ),
+          const SizedBox(height: 5),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: TextStyle(
+                color: TColor.negro,
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: TColor.gris,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
