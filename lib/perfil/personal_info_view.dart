@@ -1,7 +1,7 @@
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
+import 'package:afermar3_tf_ipc/perfil/edit_personal_info_view.dart';
 import 'package:afermar3_tf_ipc/services/profile_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 class PersonalInfoView extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -16,69 +16,64 @@ class PersonalInfoView extends StatefulWidget {
 }
 
 class _PersonalInfoViewState extends State<PersonalInfoView> {
-  final _formKey = GlobalKey<FormState>();
+  late Map<String, dynamic> _profile;
 
-  late TextEditingController nameController;
-  late TextEditingController surnameController;
-  late TextEditingController ageController;
-  late TextEditingController heightController;
-  late TextEditingController weightController;
-
-  String selectedGender = "Otro";
-  String selectedGoal = "Ganar músculo";
-
-  bool isLoading = false;
-
-  final List<String> genderOptions = [
-    "Hombre",
-    "Mujer",
-    "Otro",
-  ];
-
-  final List<String> goalOptions = [
-    "Ganar músculo",
-    "Definir y tonificar",
-    "Perder grasa",
-  ];
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
 
-    nameController = TextEditingController(
-      text: widget.profile["name"]?.toString() ?? "",
-    );
+    _profile = Map<String, dynamic>.from(widget.profile);
+  }
 
-    surnameController = TextEditingController(
-      text: widget.profile["surname"]?.toString() ?? "",
-    );
+  Future<void> _reloadProfile() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    ageController = TextEditingController(
-      text: widget.profile["age"]?.toString() ?? "",
-    );
+    try {
+      final data = await ProfileService.getProfile();
 
-    heightController = TextEditingController(
-      text: _cleanNumber(widget.profile["height_cm"]),
-    );
+      if (!mounted) return;
 
-    weightController = TextEditingController(
-      text: _cleanNumber(widget.profile["weight_kg"]),
-    );
+      setState(() {
+        _profile = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
 
-    selectedGender = widget.profile["gender"]?.toString() ?? "Otro";
-    selectedGoal = widget.profile["goal"]?.toString() ?? goalOptions.first;
-
-    if (!genderOptions.contains(selectedGender)) {
-      selectedGender = "Otro";
-    }
-
-    if (!goalOptions.contains(selectedGoal)) {
-      selectedGoal = goalOptions.first;
+      setState(() {
+        _errorMessage = e.toString().replaceFirst("Exception: ", "");
+        _isLoading = false;
+      });
     }
   }
 
-  String _cleanNumber(dynamic value) {
-    if (value == null) return "";
+  Future<void> _openEditProfile() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditPersonalInfoView(
+          profile: _profile,
+        ),
+      ),
+    );
+
+    if (result == true) {
+      await _reloadProfile();
+
+      if (!mounted) return;
+
+      Navigator.pop(context, true);
+    }
+  }
+
+  String _formatNumber(dynamic value) {
+    if (value == null) return "--";
 
     final text = value.toString();
 
@@ -89,138 +84,108 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
     return text;
   }
 
-  @override
-  void dispose() {
-    nameController.dispose();
-    surnameController.dispose();
-    ageController.dispose();
-    heightController.dispose();
-    weightController.dispose();
-    super.dispose();
+  String _displayText(dynamic value, String fallback) {
+    if (value == null) return fallback;
+
+    final text = value.toString().trim();
+
+    if (text.isEmpty || text == "null") {
+      return fallback;
+    }
+
+    return text;
   }
 
-  Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Revisa los datos introducidos."),
-        ),
-      );
-      return;
+  String _fullName() {
+    final name = _displayText(_profile["name"], "Usuario");
+    final surname = _displayText(_profile["surname"], "");
+
+    if (surname.isEmpty) {
+      return name;
     }
 
-    setState(() {
-      isLoading = true;
-    });
-
-    try {
-      await ProfileService.updateProfile(
-        name: nameController.text.trim(),
-        surname: surnameController.text.trim(),
-        gender: selectedGender,
-        age: int.tryParse(ageController.text.trim()),
-        heightCm: double.tryParse(
-          heightController.text.trim().replaceAll(",", "."),
-        ),
-        weightKg: double.tryParse(
-          weightController.text.trim().replaceAll(",", "."),
-        ),
-        goal: selectedGoal,
-      );
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text("Perfil actualizado correctamente"),
-          backgroundColor: TColor.rojo,
-        ),
-      );
-
-      Navigator.pop(context, true);
-    } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().replaceFirst("Exception: ", ""),
-          ),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
-    }
+    return "$name $surname";
   }
 
-  String? _requiredText(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return "Campo obligatorio";
+  String _heightText() {
+    if (_profile["height_cm"] == null) {
+      return "No definida";
     }
-    return null;
+
+    return "${_formatNumber(_profile["height_cm"])} cm";
   }
 
-  String? _validateAge(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return "Introduce tu edad";
+  String _weightText() {
+    if (_profile["weight_kg"] == null) {
+      return "No definido";
     }
 
-    final age = int.tryParse(value);
-
-    if (age == null) {
-      return "Introduce un número válido";
-    }
-
-    if (age < 10 || age > 100) {
-      return "Introduce una edad realista";
-    }
-
-    return null;
+    return "${_formatNumber(_profile["weight_kg"])} kg";
   }
 
-  String? _validateHeight(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return "Introduce tu altura";
+  String _ageText() {
+    if (_profile["age"] == null) {
+      return "No definida";
     }
 
-    final height = double.tryParse(value.replaceAll(",", "."));
-
-    if (height == null) {
-      return "Introduce un número válido";
-    }
-
-    if (height < 80 || height > 250) {
-      return "Introduce una altura realista";
-    }
-
-    return null;
+    return "${_formatNumber(_profile["age"])} años";
   }
 
-  String? _validateWeight(String? value) {
-    if (value == null || value.trim().isEmpty) {
-      return "Introduce tu peso";
+  double? _toDouble(dynamic value) {
+    if (value == null) return null;
+
+    if (value is num) {
+      return value.toDouble();
     }
 
-    final weight = double.tryParse(value.replaceAll(",", "."));
+    return double.tryParse(value.toString().replaceAll(",", "."));
+  }
 
-    if (weight == null) {
-      return "Introduce un número válido";
+  String _bmiText() {
+    final weight = _toDouble(_profile["weight_kg"]);
+    final heightCm = _toDouble(_profile["height_cm"]);
+
+    if (weight == null || heightCm == null || weight <= 0 || heightCm <= 0) {
+      return "No disponible";
     }
 
-    if (weight < 20 || weight > 300) {
-      return "Introduce un peso realista";
+    final heightM = heightCm / 100;
+    final bmi = weight / (heightM * heightM);
+
+    return bmi.toStringAsFixed(1).replaceAll(".", ",");
+  }
+
+  String _bmiStatusText() {
+    final weight = _toDouble(_profile["weight_kg"]);
+    final heightCm = _toDouble(_profile["height_cm"]);
+
+    if (weight == null || heightCm == null || weight <= 0 || heightCm <= 0) {
+      return "Completa peso y altura para calcularlo.";
     }
 
-    return null;
+    final heightM = heightCm / 100;
+    final bmi = weight / (heightM * heightM);
+
+    if (bmi < 18.5) {
+      return "Bajo peso";
+    }
+
+    if (bmi < 25) {
+      return "Peso normal";
+    }
+
+    if (bmi < 30) {
+      return "Sobrepeso";
+    }
+
+    return "Obesidad";
   }
 
   @override
   Widget build(BuildContext context) {
+    final goal = _displayText(_profile["goal"], "Sin objetivo definido");
+    final gender = _displayText(_profile["gender"], "No definido");
+
     return Scaffold(
       backgroundColor: TColor.blanco,
       appBar: AppBar(
@@ -228,7 +193,9 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          onPressed: isLoading ? null : () => Navigator.pop(context),
+          onPressed: () {
+            Navigator.pop(context);
+          },
           icon: Icon(
             Icons.arrow_back_ios_new_rounded,
             color: TColor.negro,
@@ -242,128 +209,147 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
             fontWeight: FontWeight.w800,
           ),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: _isLoading ? null : _reloadProfile,
+              child: Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.refresh_rounded,
+                  color: TColor.negro,
+                  size: 21,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
-          child: Form(
-            key: _formKey,
+        child: RefreshIndicator(
+          color: TColor.rojo,
+          onRefresh: _reloadProfile,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _HeaderCard(
-                  title: "Tus datos",
-                  subtitle:
-                      "Mantén tu información actualizada para que PulseAI pueda personalizar mejor tus rutinas, progreso y recomendaciones.",
+                if (_errorMessage != null) ...[
+                  _ErrorCard(
+                    message: _errorMessage!,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                _ProfileSummaryCard(
+                  fullName: _fullName(),
+                  goal: goal,
+                  gender: gender,
                 ),
-
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MiniInfoCard(
+                        icon: Icons.height_rounded,
+                        label: "Altura",
+                        value: _heightText(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _MiniInfoCard(
+                        icon: Icons.monitor_weight_rounded,
+                        label: "Peso",
+                        value: _weightText(),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _MiniInfoCard(
+                        icon: Icons.cake_outlined,
+                        label: "Edad",
+                        value: _ageText(),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 22),
-
-                _InputField(
-                  controller: nameController,
-                  label: "Nombre",
-                  icon: Icons.person_outline_rounded,
-                  validator: _requiredText,
-                  enabled: !isLoading,
-                ),
-
-                const SizedBox(height: 14),
-
-                _InputField(
-                  controller: surnameController,
-                  label: "Apellidos",
-                  icon: Icons.badge_outlined,
-                  validator: _requiredText,
-                  enabled: !isLoading,
-                ),
-
-                const SizedBox(height: 14),
-
-                _DropdownField(
-                  label: "Género",
-                  icon: Icons.wc_rounded,
-                  value: selectedGender,
-                  items: genderOptions,
-                  enabled: !isLoading,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      selectedGender = value;
-                    });
-                  },
-                ),
-
-                const SizedBox(height: 14),
-
-                _InputField(
-                  controller: ageController,
-                  label: "Edad",
-                  icon: Icons.cake_outlined,
-                  suffixText: "años",
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
+                _SectionCard(
+                  title: "Datos personales",
+                  children: [
+                    _InfoRow(
+                      icon: Icons.person_outline_rounded,
+                      title: "Nombre",
+                      value: _displayText(_profile["name"], "No definido"),
+                    ),
+                    _InfoRow(
+                      icon: Icons.badge_outlined,
+                      title: "Apellidos",
+                      value: _displayText(_profile["surname"], "No definido"),
+                    ),
+                    _InfoRow(
+                      icon: Icons.wc_rounded,
+                      title: "Género",
+                      value: gender,
+                    ),
+                    _InfoRow(
+                      icon: Icons.flag_outlined,
+                      title: "Objetivo",
+                      value: goal,
+                      isLast: true,
+                    ),
                   ],
-                  validator: _validateAge,
-                  enabled: !isLoading,
                 ),
-
-                const SizedBox(height: 14),
-
-                _InputField(
-                  controller: heightController,
-                  label: "Altura",
-                  icon: Icons.height_rounded,
-                  suffixText: "cm",
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                const SizedBox(height: 18),
+                _SectionCard(
+                  title: "Medidas y salud",
+                  children: [
+                    _InfoRow(
+                      icon: Icons.cake_outlined,
+                      title: "Edad",
+                      value: _ageText(),
+                    ),
+                    _InfoRow(
+                      icon: Icons.height_rounded,
+                      title: "Altura",
+                      value: _heightText(),
+                    ),
+                    _InfoRow(
+                      icon: Icons.monitor_weight_rounded,
+                      title: "Peso",
+                      value: _weightText(),
+                    ),
+                    _InfoRow(
+                      icon: Icons.favorite_outline_rounded,
+                      title: "IMC",
+                      value: "${_bmiText()} · ${_bmiStatusText()}",
+                      isLast: true,
+                    ),
                   ],
-                  validator: _validateHeight,
-                  enabled: !isLoading,
                 ),
-
-                const SizedBox(height: 14),
-
-                _InputField(
-                  controller: weightController,
-                  label: "Peso",
-                  icon: Icons.monitor_weight_rounded,
-                  suffixText: "kg",
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-                  ],
-                  validator: _validateWeight,
-                  enabled: !isLoading,
-                ),
-
-                const SizedBox(height: 14),
-
-                _DropdownField(
-                  label: "Objetivo",
-                  icon: Icons.flag_outlined,
-                  value: selectedGoal,
-                  items: goalOptions,
-                  enabled: !isLoading,
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      selectedGoal = value;
-                    });
-                  },
-                ),
-
-                const SizedBox(height: 28),
-
+                const SizedBox(height: 26),
                 SizedBox(
                   width: double.infinity,
                   height: 56,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : _saveProfile,
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _openEditProfile,
+                    icon: const Icon(Icons.edit_rounded),
+                    label: const Text(
+                      "Editar información",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: TColor.rojo,
                       foregroundColor: Colors.white,
@@ -373,13 +359,17 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
                         borderRadius: BorderRadius.circular(18),
                       ),
                     ),
-                    child: Text(
-                      isLoading ? "Guardando..." : "Guardar cambios",
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  "Estos datos se usan para personalizar rutinas, objetivos, progreso y recomendaciones del Coach IA.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: TColor.gris,
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
@@ -391,23 +381,31 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
   }
 }
 
-class _HeaderCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
+class _ProfileSummaryCard extends StatelessWidget {
+  final String fullName;
+  final String goal;
+  final String gender;
 
-  const _HeaderCard({
-    required this.title,
-    required this.subtitle,
+  const _ProfileSummaryCard({
+    required this.fullName,
+    required this.goal,
+    required this.gender,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: TColor.rojo.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          colors: [
+            TColor.rojo.withOpacity(0.13),
+            TColor.rojo.withOpacity(0.04),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(26),
         border: Border.all(
           color: TColor.rojo.withOpacity(0.10),
         ),
@@ -415,38 +413,60 @@ class _HeaderCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 54,
-            height: 54,
+            width: 66,
+            height: 66,
+            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              color: TColor.rojo.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(18),
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  TColor.rojo.withOpacity(0.9),
+                  TColor.rojo,
+                ],
+              ),
             ),
-            child: Icon(
-              Icons.manage_accounts_rounded,
-              color: TColor.rojo,
-              size: 30,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(40),
+              child: Image.asset(
+                "assets/img/foto.png",
+                fit: BoxFit.cover,
+              ),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  fullName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: TColor.negro,
-                    fontSize: 17,
+                    fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 5),
                 Text(
-                  subtitle,
+                  "Objetivo: $goal",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: TColor.gris,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  "Género: $gender",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: TColor.gris,
                     fontSize: 12,
-                    height: 1.35,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -459,172 +479,227 @@ class _HeaderCard extends StatelessWidget {
   }
 }
 
-class _InputField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
+class _MiniInfoCard extends StatelessWidget {
   final IconData icon;
-  final String? suffixText;
-  final bool enabled;
-  final TextInputType? keyboardType;
-  final List<TextInputFormatter>? inputFormatters;
-  final String? Function(String?)? validator;
+  final String label;
+  final String value;
 
-  const _InputField({
-    required this.controller,
-    required this.label,
+  const _MiniInfoCard({
     required this.icon,
-    this.suffixText,
-    this.enabled = true,
-    this.keyboardType,
-    this.inputFormatters,
-    this.validator,
+    required this.label,
+    required this.value,
   });
 
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      enabled: enabled,
-      keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
-      validator: validator,
-      style: TextStyle(
-        color: TColor.negro,
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
+    return Container(
+      height: 92,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      decoration: BoxDecoration(
+        color: TColor.rojo,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: TColor.rojo.withOpacity(0.18),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-          color: TColor.gris,
-          fontWeight: FontWeight.w500,
-        ),
-        prefixIcon: Icon(
-          icon,
-          color: TColor.rojo,
-        ),
-        suffixText: suffixText,
-        suffixStyle: TextStyle(
-          color: TColor.negro,
-          fontWeight: FontWeight.w800,
-        ),
-        filled: true,
-        fillColor: Colors.grey.shade100,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 18,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(
-            color: Colors.grey.shade200,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: TColor.blanco,
+            size: 22,
           ),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(
-            color: Colors.grey.shade200,
+          const SizedBox(height: 6),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: TColor.blanco,
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+            ),
           ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(
-            color: TColor.rojo,
-            width: 1.5,
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: TColor.blanco.withOpacity(0.85),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(
-            color: Colors.redAccent,
-          ),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(
-            color: Colors.redAccent,
-            width: 1.5,
-          ),
-        ),
+        ],
       ),
     );
   }
 }
 
-class _DropdownField extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final String value;
-  final List<String> items;
-  final bool enabled;
-  final ValueChanged<String?> onChanged;
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
 
-  const _DropdownField({
-    required this.label,
-    required this.icon,
-    required this.value,
-    required this.items,
-    required this.onChanged,
-    this.enabled = true,
+  const _SectionCard({
+    required this.title,
+    required this.children,
   });
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      value: value,
-      onChanged: enabled ? onChanged : null,
-      icon: Icon(
-        Icons.keyboard_arrow_down_rounded,
-        color: TColor.rojo,
-      ),
-      dropdownColor: Colors.white,
-      style: TextStyle(
-        color: TColor.negro,
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-      ),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-          color: TColor.gris,
-          fontWeight: FontWeight.w500,
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+      decoration: BoxDecoration(
+        color: TColor.blanco,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.grey.shade100,
         ),
-        prefixIcon: Icon(
-          icon,
-          color: TColor.rojo,
-        ),
-        filled: true,
-        fillColor: Colors.grey.shade100,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 18,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(
-            color: Colors.grey.shade200,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.055),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(
-            color: Colors.grey.shade200,
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: TColor.negro,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: BorderSide(
-            color: TColor.rojo,
-            width: 1.5,
-          ),
+          const SizedBox(height: 8),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+  final bool isLast;
+
+  const _InfoRow({
+    required this.icon,
+    required this.title,
+    required this.value,
+    this.isLast = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(
+        top: 12,
+        bottom: isLast ? 12 : 13,
+      ),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: isLast
+              ? BorderSide.none
+              : BorderSide(
+                  color: Colors.grey.shade100,
+                ),
         ),
       ),
-      items: items.map((item) {
-        return DropdownMenuItem<String>(
-          value: item,
-          child: Text(item),
-        );
-      }).toList(),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: TColor.rojo.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              icon,
+              color: TColor.rojo,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: TColor.gris,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: TColor.negro,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorCard extends StatelessWidget {
+  final String message;
+
+  const _ErrorCard({
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.redAccent.withOpacity(0.15),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Colors.redAccent,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

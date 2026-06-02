@@ -1,8 +1,14 @@
 import 'package:afermar3_tf_ipc/info_user/login_view.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
+import 'package:afermar3_tf_ipc/perfil/achievements_view.dart';
+import 'package:afermar3_tf_ipc/perfil/app_tutorials_view.dart';
 import 'package:afermar3_tf_ipc/perfil/contact_view.dart';
 import 'package:afermar3_tf_ipc/perfil/personal_info_view.dart';
 import 'package:afermar3_tf_ipc/perfil/privacy_policy_view.dart';
+import 'package:afermar3_tf_ipc/perfil/profile_activity_history_view.dart';
+import 'package:afermar3_tf_ipc/perfil/profile_progress_view.dart';
+import 'package:afermar3_tf_ipc/perfil/profile_settings_view.dart';
+import 'package:afermar3_tf_ipc/perfil/edit_personal_info_view.dart';
 import 'package:afermar3_tf_ipc/services/auth_service.dart';
 import 'package:afermar3_tf_ipc/services/profile_service.dart';
 import 'package:afermar3_tf_ipc/widgets/boton.dart';
@@ -42,6 +48,14 @@ class _PerfilWidget extends State<Perfil> {
     },
   ];
 
+  final List<Map<String, dynamic>> helpArr = [
+    {
+      "icon": Icons.help_outline_rounded,
+      "nombre": "Ayuda y tutoriales",
+      "tag": "8",
+    },
+  ];
+
   final List<Map<String, dynamic>> otherArr = [
     {
       "icon": Icons.mail_outline_rounded,
@@ -52,11 +66,6 @@ class _PerfilWidget extends State<Perfil> {
       "icon": Icons.privacy_tip_outlined,
       "nombre": "Política de privacidad",
       "tag": "6",
-    },
-    {
-      "icon": Icons.settings_outlined,
-      "nombre": "Ajustes",
-      "tag": "7",
     },
   ];
 
@@ -111,19 +120,67 @@ class _PerfilWidget extends State<Perfil> {
     }
   }
 
+    Future<void> _openEditPersonalInfo() async {
+    if (profile == null) return;
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditPersonalInfoView(
+          profile: profile!,
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _loadProfile();
+    }
+  }
+
   void _onAccountOptionPressed(String tag) {
     switch (tag) {
       case "1":
         _openPersonalInfo();
         break;
+
       case "2":
-        _showComingSoon("Logros");
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AchievementsView(),
+          ),
+        );
         break;
+
       case "3":
-        _showComingSoon("Historial de actividad");
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ProfileActivityHistoryView(),
+          ),
+        );
         break;
+
       case "4":
-        _showComingSoon("Progreso");
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ProfileProgressView(),
+          ),
+        );
+        break;
+    }
+  }
+
+  void _onHelpOptionPressed(String tag) {
+    switch (tag) {
+      case "8":
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AppTutorialsView(),
+          ),
+        );
         break;
     }
   }
@@ -138,6 +195,7 @@ class _PerfilWidget extends State<Perfil> {
           ),
         );
         break;
+
       case "6":
         Navigator.push(
           context,
@@ -146,19 +204,7 @@ class _PerfilWidget extends State<Perfil> {
           ),
         );
         break;
-      case "7":
-        _showComingSoon("Ajustes");
-        break;
     }
-  }
-
-  void _showComingSoon(String title) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("$title estará disponible próximamente"),
-        backgroundColor: TColor.rojo,
-      ),
-    );
   }
 
   String _formatNumber(dynamic value) {
@@ -195,9 +241,7 @@ class _PerfilWidget extends State<Perfil> {
         ? "--"
         : "${_formatNumber(profile!["weight_kg"])} kg";
 
-    final age = profile?["age"] == null
-        ? "--"
-        : _formatNumber(profile!["age"]);
+    final age = profile?["age"] == null ? "--" : _formatNumber(profile!["age"]);
 
     return Scaffold(
       backgroundColor: TColor.blanco,
@@ -219,7 +263,14 @@ class _PerfilWidget extends State<Perfil> {
             padding: const EdgeInsets.all(8),
             child: InkWell(
               borderRadius: BorderRadius.circular(14),
-              onTap: _loadProfile,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ProfileSettingsView(),
+                  ),
+                );
+              },
               child: Container(
                 width: 42,
                 height: 42,
@@ -229,7 +280,7 @@ class _PerfilWidget extends State<Perfil> {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
-                  Icons.refresh_rounded,
+                  Icons.settings_rounded,
                   color: Colors.white,
                   size: 22,
                 ),
@@ -255,9 +306,7 @@ class _PerfilWidget extends State<Perfil> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _buildProfileHeader(),
-
                       const SizedBox(height: 22),
-
                       Row(
                         children: [
                           Expanded(
@@ -285,25 +334,25 @@ class _PerfilWidget extends State<Perfil> {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 26),
-
                       _buildSectionCard(
                         title: "Cuenta",
                         items: accountArr,
                         onItemPressed: _onAccountOptionPressed,
                       ),
-
                       const SizedBox(height: 20),
-
+                      _buildSectionCard(
+                        title: "Ayuda",
+                        items: helpArr,
+                        onItemPressed: _onHelpOptionPressed,
+                      ),
+                      const SizedBox(height: 20),
                       _buildSectionCard(
                         title: "Otros",
                         items: otherArr,
                         onItemPressed: _onOtherOptionPressed,
                       ),
-
                       const SizedBox(height: 20),
-
                       _buildLogoutButton(),
                     ],
                   ),
@@ -360,9 +409,7 @@ class _PerfilWidget extends State<Perfil> {
               ),
             ),
           ),
-
           const SizedBox(width: 16),
-
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -402,7 +449,6 @@ class _PerfilWidget extends State<Perfil> {
               ],
             ),
           ),
-
           SizedBox(
             width: 82,
             height: 34,
@@ -411,7 +457,7 @@ class _PerfilWidget extends State<Perfil> {
               type: RoundButtonType.bgGradient,
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              onPressed: _openPersonalInfo,
+              onPressed: _openEditPersonalInfo,
             ),
           ),
         ],
@@ -451,9 +497,7 @@ class _PerfilWidget extends State<Perfil> {
               fontWeight: FontWeight.w800,
             ),
           ),
-
           const SizedBox(height: 10),
-
           ListView.separated(
             physics: const NeverScrollableScrollPhysics(),
             shrinkWrap: true,
