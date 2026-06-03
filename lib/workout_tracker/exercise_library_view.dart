@@ -123,13 +123,14 @@ class _ExerciseLibraryViewState extends State<ExerciseLibraryView> {
       "title": exercise["name"]?.toString() ?? "Ejercicio",
       "value": "12x",
       "type": "reps",
-      "image": "assets/img/video_temp.png",
+      "image": exercise["image"]?.toString() ?? "assets/img/video_temp.png",
       "description": exercise["description"]?.toString() ??
           "Ejercicio disponible en la base de datos de PulseAI.",
       "exercise_id": exercise["id"],
       "muscle_group": exercise["muscle_group"],
       "difficulty": exercise["difficulty"],
       "category": exercise["category"],
+      "video_url": exercise["video_url"],
     };
 
     Navigator.push(

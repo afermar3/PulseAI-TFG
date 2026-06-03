@@ -1,9 +1,10 @@
 import 'package:afermar3_tf_ipc/common_widget/round_button.dart';
 import 'package:afermar3_tf_ipc/services/exercise_service.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:afermar3_tf_ipc/workout_tracker/exercise_video_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:readmore/readmore.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ExercisesStepDetails extends StatefulWidget {
   final Map eObj;
@@ -53,9 +54,11 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
   @override
   void initState() {
     super.initState();
+
     selectedRepetitions = _extractFirstNumber(
       widget.eObj["value"]?.toString() ?? "12",
     );
+
     _loadExerciseDetailsIfNeeded();
   }
 
@@ -69,6 +72,7 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
 
   int _extractFirstNumber(String text) {
     final match = RegExp(r'\d+').firstMatch(text);
+
     return int.tryParse(match?.group(0) ?? "") ?? 12;
   }
 
@@ -147,6 +151,61 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
 
   bool _isNetworkImage(String image) {
     return image.startsWith("http://") || image.startsWith("https://");
+  }
+
+  String? _getVideoUrl({
+    required String title,
+    required String muscleGroup,
+    required String category,
+  }) {
+    final explicitVideoUrl = _getValue("video_url", "");
+
+    return ExerciseVideoHelper.getVideoUrl(
+      exerciseName: title,
+      muscleGroup: muscleGroup,
+      category: category,
+      explicitVideoUrl: explicitVideoUrl,
+    );
+  }
+
+  Future<void> _openExerciseVideo({
+    required String title,
+    required String muscleGroup,
+    required String category,
+  }) async {
+    final videoUrl = _getVideoUrl(
+      title: title,
+      muscleGroup: muscleGroup,
+      category: category,
+    );
+
+    if (videoUrl == null || videoUrl.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("No hay vídeo disponible para este ejercicio"),
+          backgroundColor: TColor.rojo,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final uri = Uri.parse(videoUrl);
+
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("No se ha podido abrir el vídeo"),
+          backgroundColor: TColor.rojo,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
@@ -252,7 +311,13 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildVideoCard(media, image),
+                _buildVideoCard(
+                  media,
+                  image,
+                  title: title,
+                  muscleGroup: muscleGroup,
+                  category: category,
+                ),
                 const SizedBox(height: 22),
                 _buildTitleSection(
                   title: title,
@@ -366,94 +431,140 @@ class _ExercisesStepDetailsState extends State<ExercisesStepDetails> {
     );
   }
 
-  Widget _buildVideoCard(Size media, String image) {
-    return Container(
-      width: double.infinity,
-      height: media.width * 0.48,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: TColor.primaryG,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    Widget _buildVideoCard(
+    Size media,
+    String image, {
+    required String title,
+    required String muscleGroup,
+    required String category,
+  }) {
+    final explicitVideoUrl = _getValue("video_url", "");
+
+    final hasDirectVideo = ExerciseVideoHelper.hasDirectVideo(
+      exerciseName: title,
+      explicitVideoUrl: explicitVideoUrl,
+    );
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(26),
+      onTap: () {
+        _openExerciseVideo(
+          title: title,
+          muscleGroup: muscleGroup,
+          category: category,
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        height: media.width * 0.48,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: TColor.primaryG,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: [
+            BoxShadow(
+              color: TColor.primaryColor1.withOpacity(0.20),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: TColor.primaryColor1.withOpacity(0.20),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(26),
-            child: _isNetworkImage(image)
-                ? Image.network(
-                    image,
-                    width: double.infinity,
-                    height: double.infinity,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Image.asset(
-                        "assets/img/video_temp.png",
-                        width: double.infinity,
-                        height: double.infinity,
-                        fit: BoxFit.contain,
-                      );
-                    },
-                  )
-                : Image.asset(
-                    image,
-                    width: double.infinity,
-                    height: double.infinity,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Image.asset(
-                        "assets/img/video_temp.png",
-                        width: double.infinity,
-                        height: double.infinity,
-                        fit: BoxFit.contain,
-                      );
-                    },
-                  ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.18),
-              borderRadius: BorderRadius.circular(26),
-            ),
-          ),
-          InkWell(
-            borderRadius: BorderRadius.circular(35),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text(
-                    "Vídeo del ejercicio disponible próximamente",
-                  ),
-                  backgroundColor: TColor.rojo,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            child: Container(
-              width: 62,
-              height: 62,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.92),
-                shape: BoxShape.circle,
-              ),
+        child: Stack(
+          children: [
+            Positioned(
+              right: -16,
+              bottom: -18,
               child: Icon(
-                Icons.play_arrow_rounded,
-                color: TColor.rojo,
-                size: 38,
+                Icons.fitness_center_rounded,
+                color: Colors.white.withOpacity(0.10),
+                size: 130,
               ),
             ),
-          ),
-        ],
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Icon(
+                    hasDirectVideo
+                        ? Icons.play_circle_fill_rounded
+                        : Icons.search_rounded,
+                    color: Colors.white,
+                    size: 31,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  hasDirectVideo
+                      ? "Demostración externa"
+                      : "Buscar técnica",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  hasDirectVideo
+                      ? "Abre un recurso externo con la ejecución del ejercicio."
+                      : "Busca una demostración técnica externa para este ejercicio.",
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.82),
+                    fontSize: 13,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        hasDirectVideo
+                            ? Icons.open_in_new_rounded
+                            : Icons.search_rounded,
+                        color: TColor.rojo,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        hasDirectVideo
+                            ? "Abrir demostración"
+                            : "Buscar demostración",
+                        style: TextStyle(
+                          color: TColor.rojo,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
