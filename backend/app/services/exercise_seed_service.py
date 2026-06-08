@@ -183,3 +183,19 @@ def seed_exercises(db: Session) -> dict:
         "skipped": skipped,
         "total_seed": len(DEFAULT_EXERCISES),
     }
+
+
+from app.database.database import SessionLocal, Base, engine
+
+if __name__ == "__main__":
+    Base.metadata.create_all(bind=engine)
+
+    db = SessionLocal()
+    try:
+        result = seed_exercises(db)
+        print("Seed de ejercicios completado:")
+        print(f"Creados: {result['created']}")
+        print(f"Omitidos: {result['skipped']}")
+        print(f"Total definidos: {result['total_seed']}")
+    finally:
+        db.close()
