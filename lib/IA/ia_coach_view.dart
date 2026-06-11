@@ -24,23 +24,13 @@ class _AiCoachViewState extends State<AiCoachView> {
   final List<Map<String, dynamic>> _quickActions = [
     {
       "title": "Crear rutina",
-      "subtitle": "Entrenamiento personalizado",
+      "subtitle": "Genera una rutina personalizada con IA",
       "icon": Icons.fitness_center_rounded,
     },
     {
-      "title": "Ajustar dieta",
-      "subtitle": "Según tu objetivo",
-      "icon": Icons.restaurant_menu_rounded,
-    },
-    {
       "title": "Analizar progreso",
-      "subtitle": "Peso, fotos y actividad",
+      "subtitle": "Revisa tus entrenamientos, descanso y evolución",
       "icon": Icons.show_chart_rounded,
-    },
-    {
-      "title": "Resolver duda",
-      "subtitle": "Preguntas fitness",
-      "icon": Icons.help_outline_rounded,
     },
   ];
 
@@ -75,7 +65,7 @@ class _AiCoachViewState extends State<AiCoachView> {
     return {
       "isUser": false,
       "text":
-          "Hola, soy tu Coach IA de PulseAI. Puedes preguntarme sobre entrenamiento, comida, sueño o hábitos saludables.",
+          "Hola, soy tu Coach IA de PulseAI. Puedes preguntarme sobre entrenamiento, rutinas, sueño, progreso físico o hábitos saludables.",
       "fromHistory": false,
     };
   }
@@ -311,19 +301,9 @@ class _AiCoachViewState extends State<AiCoachView> {
         );
         return;
 
-      case "Ajustar dieta":
-        _messageController.text =
-            "Dame recomendaciones de alimentación personalizadas según mi perfil y mi objetivo actual. Incluye ideas de comidas, distribución diaria, proteínas, hidratación y consejos prácticos.";
-        break;
-
       case "Analizar progreso":
         _messageController.text =
-            "Analiza mi progreso actual según mi perfil y objetivo. Dame puntos fuertes, aspectos a mejorar y recomendaciones concretas para esta semana.";
-        break;
-
-      case "Resolver duda":
-        _messageController.text =
-            "Tengo una duda sobre entrenamiento, alimentación o descanso.";
+            "Analiza mi progreso actual de forma breve. Resume en máximo 5 puntos mi estado actual, puntos fuertes, aspectos a mejorar y recomendaciones concretas para esta semana.";
         break;
 
       default:
@@ -544,7 +524,7 @@ class _AiCoachViewState extends State<AiCoachView> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  "Pídele rutinas, consejos de alimentación, descanso o hábitos saludables.",
+                  "Pídele rutinas, consejos de entrenamiento, descanso o hábitos saludables.",
                   style: TextStyle(
                     color: TColor.gris,
                     fontSize: 13,
@@ -560,96 +540,43 @@ class _AiCoachViewState extends State<AiCoachView> {
     );
   }
 
-  Widget _buildQuickActions() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Acciones rápidas",
-          style: TextStyle(
-            color: TColor.negro,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
+Widget _buildQuickActions() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        "Acciones rápidas",
+        style: TextStyle(
+          color: TColor.negro,
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
         ),
-        const SizedBox(height: 14),
-        GridView.builder(
-          padding: EdgeInsets.zero,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _quickActions.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 14,
-            crossAxisSpacing: 14,
-            childAspectRatio: 1.45,
-          ),
-          itemBuilder: (context, index) {
-            final item = _quickActions[index];
+      ),
+      const SizedBox(height: 14),
 
-            return InkWell(
-              borderRadius: BorderRadius.circular(22),
-              onTap: _isLoading || _isApplyingAction || _isLoadingHistory
-                  ? null
-                  : () {
-                      _sendQuickAction(item["title"].toString());
-                    },
-              child: Opacity(
-                opacity: _isLoading || _isApplyingAction || _isLoadingHistory
-                    ? 0.55
-                    : 1,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: TColor.blanco,
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: Colors.grey.shade100,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.045),
-                        blurRadius: 14,
-                        offset: const Offset(0, 7),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        item["icon"] as IconData,
-                        color: TColor.rojo,
-                        size: 26,
-                      ),
-                      const Spacer(),
-                      Text(
-                        item["title"].toString(),
-                        style: TextStyle(
-                          color: TColor.negro,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        item["subtitle"].toString(),
-                        style: TextStyle(
-                          color: TColor.gris,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
+      ListView.separated(
+        padding: EdgeInsets.zero,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: _quickActions.length,
+        separatorBuilder: (context, index) => const SizedBox(height: 14),
+        itemBuilder: (context, index) {
+          final item = _quickActions[index];
+
+          return _QuickActionCard(
+            title: item["title"].toString(),
+            subtitle: item["subtitle"].toString(),
+            icon: item["icon"] as IconData,
+            disabled: _isLoading || _isApplyingAction || _isLoadingHistory,
+            onTap: () {
+              _sendQuickAction(item["title"].toString());
+            },
+          );
+        },
+      ),
+    ],
+  );
+}
 
   Widget _buildInputBar() {
     final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
@@ -750,6 +677,104 @@ class _AiCoachViewState extends State<AiCoachView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _QuickActionCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool disabled;
+  final VoidCallback onTap;
+
+  const _QuickActionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.disabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: disabled ? null : onTap,
+      child: Opacity(
+        opacity: disabled ? 0.55 : 1,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(17),
+          decoration: BoxDecoration(
+            color: TColor.blanco,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: Colors.grey.shade100,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.045),
+                blurRadius: 14,
+                offset: const Offset(0, 7),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: TColor.rojo.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(
+                  icon,
+                  color: TColor.rojo,
+                  size: 28,
+                ),
+              ),
+
+              const SizedBox(width: 14),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: TColor.negro,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: TColor.gris,
+                        fontSize: 12,
+                        height: 1.3,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: TColor.gris,
+                size: 16,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

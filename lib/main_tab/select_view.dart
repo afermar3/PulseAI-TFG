@@ -1,4 +1,3 @@
-import 'package:afermar3_tf_ipc/meal_plan/meal_plan_view.dart';
 import 'package:afermar3_tf_ipc/sleep_tracker/sleep_tracker_view.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:afermar3_tf_ipc/workout_tracker/workout_tracker_view.dart';
@@ -21,17 +20,20 @@ class SelectView extends StatelessWidget {
               const SizedBox(height: 24),
               _buildMainCard(),
               const SizedBox(height: 28),
+
               Text(
-                "Elige qué quieres gestionar",
+                "Gestiona tu actividad",
                 style: TextStyle(
                   color: TColor.negro,
                   fontSize: 20,
                   fontWeight: FontWeight.w900,
                 ),
               ),
+
               const SizedBox(height: 6),
+
               Text(
-                "Accede rápidamente a tus entrenamientos, dieta y descanso.",
+                "Accede rápidamente a tus entrenamientos y descanso.",
                 style: TextStyle(
                   color: TColor.gris,
                   fontSize: 13,
@@ -39,11 +41,13 @@ class SelectView extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                 ),
               ),
+
               const SizedBox(height: 22),
+
               _ActivityOptionCard(
                 icon: Icons.fitness_center_rounded,
                 title: "Entrenamientos",
-                subtitle: "Rutinas, ejercicios y progreso semanal",
+                subtitle: "Rutinas, ejercicios, agenda y progreso semanal",
                 tag: "Fuerza",
                 onTap: () {
                   Navigator.push(
@@ -54,27 +58,14 @@ class SelectView extends StatelessWidget {
                   );
                 },
               ),
+
               const SizedBox(height: 16),
-              _ActivityOptionCard(
-                icon: Icons.restaurant_menu_rounded,
-                title: "Plan de comidas",
-                subtitle: "Organiza comidas, calorías y nutrición",
-                tag: "Dieta",
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const MealPlannerView(),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
+
               _ActivityOptionCard(
                 icon: Icons.bedtime_rounded,
                 title: "Sueño",
-                subtitle: "Controla tus horas de sueño y descanso",
-                tag: "Salud",
+                subtitle: "Objetivos, registros y hábitos de descanso",
+                tag: "Descanso",
                 onTap: () {
                   Navigator.push(
                     context,
@@ -84,7 +75,9 @@ class SelectView extends StatelessWidget {
                   );
                 },
               ),
-              const SizedBox(height: 24),
+
+              const SizedBox(height: 16),
+
               _buildAiSuggestionCard(),
             ],
           ),
@@ -175,10 +168,10 @@ class SelectView extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   "Tu centro de control",
                   style: TextStyle(
@@ -189,7 +182,7 @@ class SelectView extends StatelessWidget {
                 ),
                 SizedBox(height: 6),
                 Text(
-                  "Entrena, come mejor y descansa con seguimiento personalizado.",
+                  "Organiza tus entrenamientos y descanso con seguimiento personalizado.",
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 13,
@@ -199,6 +192,40 @@ class SelectView extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.grey.shade100,
+        ),
+      ),
+      child: Row(
+        children: [
+          _SummaryItem(
+            icon: Icons.fitness_center_rounded,
+            title: "Entrena",
+            subtitle: "Rutinas y ejercicios",
+          ),
+          Container(
+            width: 1,
+            height: 48,
+            margin: const EdgeInsets.symmetric(horizontal: 14),
+            color: Colors.grey.shade200,
+          ),
+          _SummaryItem(
+            icon: Icons.bedtime_rounded,
+            title: "Descansa",
+            subtitle: "Sueño y hábitos",
           ),
         ],
       ),
@@ -226,7 +253,7 @@ class SelectView extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              "Más adelante, el Coach IA podrá analizar estos apartados y proponerte cambios automáticos en tu plan.",
+              "El Coach IA puede ayudarte a relacionar tu entrenamiento, descanso y progreso físico para ofrecer recomendaciones más personalizadas.",
               style: TextStyle(
                 color: TColor.gris,
                 fontSize: 12,
@@ -345,6 +372,71 @@ class _ActivityOptionCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SummaryItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  const _SummaryItem({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: TColor.rojo.withOpacity(0.10),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              icon,
+              color: TColor.rojo,
+              size: 23,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: TColor.negro,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: TColor.gris,
+                    fontSize: 11,
+                    height: 1.2,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
