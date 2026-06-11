@@ -83,4 +83,56 @@ throw Exception(data["detail"] ?? "No se ha podido iniciar sesión");
   static Future<void> logout() async {
     await TokenStorage.clearSession();
   }
+
+
+
+static Future<Map<String, dynamic>> forgotPassword({
+  required String email,
+}) async {
+  final url = Uri.parse("${ApiClient.baseUrl}/auth/forgot-password");
+
+  final response = await http.post(
+    url,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: jsonEncode({
+      "email": email,
+    }),
+  );
+
+  final data = jsonDecode(response.body);
+
+  if (response.statusCode == 200) {
+    return data;
+  }
+
+  throw Exception(data["detail"] ?? "No se ha podido iniciar la recuperación");
+}
+
+static Future<String> resetPassword({
+  required String token,
+  required String newPassword,
+}) async {
+  final url = Uri.parse("${ApiClient.baseUrl}/auth/reset-password");
+
+  final response = await http.post(
+    url,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: jsonEncode({
+      "token": token,
+      "new_password": newPassword,
+    }),
+  );
+
+  final data = jsonDecode(response.body);
+
+  if (response.statusCode == 200) {
+    return data["message"] ?? "Contraseña actualizada correctamente";
+  }
+
+  throw Exception(data["detail"] ?? "No se ha podido actualizar la contraseña");
+}  
 }

@@ -1,11 +1,26 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-
-from app.core.security import create_access_token, hash_password, verify_password
+from datetime import datetime, timedelta
+from app.core.security import (
+    create_access_token,
+    create_password_reset_token,
+    hash_password,
+    hash_password_reset_token,
+    verify_password,
+    verify_password_reset_token,
+)
 from app.database.database import get_db
-from app.database.models import User, UserProfile
-from app.schemas.auth_schema import AuthResponse, LoginRequest, RegisterRequest
+from app.database.models import PasswordResetToken, User, UserProfile
+from app.schemas.auth_schema import (
+    AuthResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    LoginRequest,
+    MessageResponse,
+    RegisterRequest,
+    ResetPasswordRequest,
+)
 
 router = APIRouter(
     prefix="/auth",
@@ -63,6 +78,78 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         "user": user,
     }
 
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email).first()
+
+    if not user:
+        return {
+            "message": "Si existe una cuenta con ese correo, se generará una solicitud de recuperación.",
+            "reset_token": None,
+        }
+
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used == False,
+    ).update({"used": True})
+
+    plain_token = create_password_reset_token()
+    token_hash = hash_password_reset_token(plain_token)
+
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=datetime.utcnow() + timedelta(minutes=15),
+        used=False,
+    )
+
+    db.add(reset_token)
+    db.commit()
+
+    return {
+        "message": "Token de recuperación generado correctamente.",
+        "reset_token": plain_token,
+    }
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    token_hash = hash_password_reset_token(data.token)
+
+    reset_token = db.query(PasswordResetToken).filter(
+        PasswordResetToken.token_hash == token_hash,
+        PasswordResetToken.used == False,
+    ).first()
+
+    if not reset_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El enlace de recuperación no es válido o ya ha sido utilizado",
+        )
+
+    if reset_token.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El enlace de recuperación ha caducado",
+        )
+
+    user = db.query(User).filter(User.id == reset_token.user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado",
+        )
+
+    user.password_hash = hash_password(data.new_password)
+    reset_token.used = True
+
+    db.commit()
+
+    return {
+        "message": "Contraseña actualizada correctamente",
+    }
 
 @router.post("/token")
 def login_for_swagger(

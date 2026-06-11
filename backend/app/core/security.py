@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
+import hashlib
+import secrets
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -73,3 +75,15 @@ def get_current_user(
         raise credentials_exception
 
     return user
+
+
+def create_password_reset_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_password_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def verify_password_reset_token(token: str, token_hash: str) -> bool:
+    return hash_password_reset_token(token) == token_hash

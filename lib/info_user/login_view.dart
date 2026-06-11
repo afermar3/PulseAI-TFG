@@ -3,6 +3,7 @@ import 'package:afermar3_tf_ipc/main_tab/main_tab_view.dart';
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/services/auth_service.dart';
 import 'package:afermar3_tf_ipc/widgets/boton.dart';
+import 'package:afermar3_tf_ipc/info_user/forgot_password_view.dart';
 import 'package:afermar3_tf_ipc/widgets/campostexto.dart';
 import 'package:flutter/material.dart';
 
@@ -149,9 +150,16 @@ class _LoginView extends State<Login> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {
-                        // Más adelante recuperación de contraseña
-                      },
+                      onPressed: isLoading
+                          ? null
+                          : () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const ForgotPasswordView(),
+                                ),
+                              );
+                            },
                       child: Text(
                         "¿Has olvidado tu contraseña?",
                         style: TextStyle(
