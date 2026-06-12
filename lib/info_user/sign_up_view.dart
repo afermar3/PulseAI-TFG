@@ -222,46 +222,6 @@ class _SignUpView extends State<SignUp> {
                   onPressed: isLoading ? () {} : _register,
                 ),
 
-                const SizedBox(height: 24),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        height: 1,
-                        color: TColor.gris.withOpacity(0.3),
-                      ),
-                    ),
-                    Text(
-                      "  O  ",
-                      style: TextStyle(color: TColor.gris, fontSize: 13),
-                    ),
-                    Expanded(
-                      child: Container(
-                        height: 1,
-                        color: TColor.gris.withOpacity(0.3),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 22),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _SocialButton(
-                      image: "assets/img/google.png",
-                      onTap: () {},
-                    ),
-                    const SizedBox(width: 18),
-                    _SocialButton(
-                      image: "assets/img/facebook.png",
-                      onTap: () {},
-                    ),
-                  ],
-                ),
-
                 const SizedBox(height: 26),
 
                 TextButton(
@@ -321,47 +281,6 @@ class _SignUpView extends State<SignUp> {
   }
 }
 
-class _SocialButton extends StatelessWidget {
-  final String image;
-  final VoidCallback onTap;
-
-  const _SocialButton({
-    required this.image,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 56,
-        height: 56,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: TColor.blanco,
-          border: Border.all(
-            width: 1,
-            color: TColor.gris.withOpacity(0.25),
-          ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Image.asset(
-          image,
-          width: 24,
-          height: 24,
-        ),
-      ),
-    );
-  }
-}
 
 String? validateName(String? value) {
   if (value == null || value.trim().isEmpty) {

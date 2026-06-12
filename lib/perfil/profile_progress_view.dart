@@ -675,8 +675,10 @@ class _ProgressStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 112,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      constraints: const BoxConstraints(
+        minHeight: 118,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: TColor.blanco,
         borderRadius: BorderRadius.circular(22),
@@ -692,14 +694,15 @@ class _ProgressStatCard extends StatelessWidget {
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             icon,
             color: color,
-            size: 24,
+            size: 23,
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: 6),
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
@@ -707,7 +710,7 @@ class _ProgressStatCard extends StatelessWidget {
               maxLines: 1,
               style: TextStyle(
                 color: TColor.negro,
-                fontSize: 18,
+                fontSize: 17,
                 fontWeight: FontWeight.w900,
               ),
             ),
@@ -719,7 +722,7 @@ class _ProgressStatCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: TColor.negro,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -730,7 +733,7 @@ class _ProgressStatCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: TColor.gris,
-              fontSize: 10,
+              fontSize: 9.5,
               fontWeight: FontWeight.w500,
             ),
           ),

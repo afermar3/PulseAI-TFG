@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 enum StatsPeriod {
   week,
   month,
-  total,
 }
 
 class WorkoutStatsView extends StatefulWidget {
@@ -24,7 +23,6 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
 
   Map<String, dynamic>? weeklySummary;
   Map<String, dynamic>? monthlySummary;
-  Map<String, dynamic>? totalSummary;
   Map<String, dynamic>? streak;
 
   @override
@@ -49,7 +47,6 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
       final results = await Future.wait([
         WorkoutSessionService.getWeeklyWorkoutSummary(),
         WorkoutSessionService.getMonthlyWorkoutSummary(),
-        WorkoutSessionService.getWorkoutSummary(),
         WorkoutSessionService.getWorkoutStreak(),
       ]);
 
@@ -58,8 +55,7 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
       setState(() {
         weeklySummary = results[0];
         monthlySummary = results[1];
-        totalSummary = results[2];
-        streak = results[3];
+        streak = results[2];
         isLoading = false;
       });
     } catch (e) {
@@ -78,8 +74,6 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
         return weeklySummary ?? {};
       case StatsPeriod.month:
         return monthlySummary ?? {};
-      case StatsPeriod.total:
-        return totalSummary ?? {};
     }
   }
 
@@ -89,8 +83,6 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
         return "Esta semana";
       case StatsPeriod.month:
         return "Este mes";
-      case StatsPeriod.total:
-        return "Total histórico";
     }
   }
 
@@ -115,9 +107,33 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
         }
 
         return "$start · $end";
+    }
+  }
 
-      case StatsPeriod.total:
-        return "Todas tus sesiones registradas";
+  String get _chartTitle {
+    switch (selectedPeriod) {
+      case StatsPeriod.week:
+        return "Minutos por día";
+      case StatsPeriod.month:
+        return "Minutos por semana";
+    }
+  }
+
+  String get _chartSubtitle {
+    switch (selectedPeriod) {
+      case StatsPeriod.week:
+        return "Muestra el tiempo entrenado cada día de esta semana.";
+      case StatsPeriod.month:
+        return "Muestra el tiempo total entrenado en cada semana del mes.";
+    }
+  }
+
+  String get _chartFooterText {
+    switch (selectedPeriod) {
+      case StatsPeriod.week:
+        return "Eje inferior: días de la semana · Línea: minutos entrenados";
+      case StatsPeriod.month:
+        return "Eje inferior: semanas del mes · Línea: minutos entrenados";
     }
   }
 
@@ -153,52 +169,39 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
       });
     }
 
-    if (selectedPeriod == StatsPeriod.month) {
-      final raw = monthlySummary?["weekly_summary"];
-      final spots = <FlSpot>[];
+    final raw = monthlySummary?["weekly_summary"];
+    final spots = <FlSpot>[];
 
-      if (raw is List) {
-        for (final item in raw) {
-          final map = item is Map<String, dynamic>
-              ? item
-              : item is Map
-                  ? Map<String, dynamic>.from(item)
-                  : null;
+    if (raw is List) {
+      for (final item in raw) {
+        final map = item is Map<String, dynamic>
+            ? item
+            : item is Map
+                ? Map<String, dynamic>.from(item)
+                : null;
 
-          if (map == null) continue;
+        if (map == null) continue;
 
-          final weekIndex = _parseInt(map["week_index"]);
-          final minutes = _parseInt(map["total_minutes"]);
+        final weekIndex = _parseInt(map["week_index"]);
+        final minutes = _parseInt(map["total_minutes"]);
 
-          if (weekIndex > 0) {
-            spots.add(FlSpot(weekIndex.toDouble(), minutes.toDouble()));
-          }
+        if (weekIndex > 0) {
+          spots.add(FlSpot(weekIndex.toDouble(), minutes.toDouble()));
         }
       }
-
-      if (spots.isEmpty) {
-        return const [
-          FlSpot(1, 0),
-          FlSpot(2, 0),
-          FlSpot(3, 0),
-          FlSpot(4, 0),
-        ];
-      }
-
-      return spots;
     }
 
-    final sessions = _parseInt(totalSummary?["total_sessions"]);
-    final minutes = _parseInt(totalSummary?["total_minutes"]);
-    final exercises = _parseInt(totalSummary?["total_completed_exercises"]);
-    final kcal = _parseInt(totalSummary?["estimated_kcal"]);
+    if (spots.isEmpty) {
+      return const [
+        FlSpot(1, 0),
+        FlSpot(2, 0),
+        FlSpot(3, 0),
+        FlSpot(4, 0),
+        FlSpot(5, 0),
+      ];
+    }
 
-    return [
-      FlSpot(1, sessions.toDouble()),
-      FlSpot(2, minutes.toDouble()),
-      FlSpot(3, exercises.toDouble()),
-      FlSpot(4, kcal.toDouble()),
-    ];
+    return spots;
   }
 
   double _calculateMaxY(List<FlSpot> spots) {
@@ -235,32 +238,11 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
       }
     }
 
-    if (selectedPeriod == StatsPeriod.month) {
-      return "S${value.toInt()}";
-    }
-
-    switch (value.toInt()) {
-      case 1:
-        return "Ses";
-      case 2:
-        return "Min";
-      case 3:
-        return "Ej";
-      case 4:
-        return "Kcal";
-      default:
-        return "";
-    }
+    return "S${value.toInt()}";
   }
 
   String _tooltipSuffix() {
-    switch (selectedPeriod) {
-      case StatsPeriod.week:
-      case StatsPeriod.month:
-        return "min";
-      case StatsPeriod.total:
-        return "";
-    }
+    return "min";
   }
 
   @override
@@ -353,15 +335,6 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
               });
             },
           ),
-          _PeriodButton(
-            text: "Total",
-            selected: selectedPeriod == StatsPeriod.total,
-            onTap: () {
-              setState(() {
-                selectedPeriod = StatsPeriod.total;
-              });
-            },
-          ),
         ],
       ),
     );
@@ -433,7 +406,8 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
     final sessions = _parseInt(summary["total_sessions"]).toString();
     final minutes = _parseInt(summary["total_minutes"]).toString();
     final kcal = _parseInt(summary["estimated_kcal"]).toString();
-    final exercises = _parseInt(summary["total_completed_exercises"]).toString();
+    final exercises =
+        _parseInt(summary["total_completed_exercises"]).toString();
 
     return Column(
       children: [
@@ -487,8 +461,7 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
 
     return Container(
       width: double.infinity,
-      height: 270,
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
       decoration: BoxDecoration(
         color: TColor.primaryColor1,
         borderRadius: BorderRadius.circular(26),
@@ -503,16 +476,53 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            "Evolución",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.w900,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.16),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.timeline_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _chartTitle,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _chartSubtitle,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.78),
+                        fontSize: 12,
+                        height: 1.3,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          Expanded(
+          const SizedBox(height: 18),
+          SizedBox(
+            height: 175,
             child: LineChart(
               LineChartData(
                 minY: 0,
@@ -527,7 +537,7 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
                         final value = spot.y.toInt();
 
                         return LineTooltipItem(
-                          suffix.isEmpty ? "$value" : "$value $suffix",
+                          "$value $suffix",
                           const TextStyle(
                             color: Colors.white,
                             fontSize: 11,
@@ -598,6 +608,39 @@ class _WorkoutStatsViewState extends State<WorkoutStatsView> {
                   ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline_rounded,
+                  color: Colors.white.withOpacity(0.88),
+                  size: 17,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _chartFooterText,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.86),
+                      fontSize: 11,
+                      height: 1.25,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

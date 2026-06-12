@@ -475,8 +475,10 @@ class _AchievementStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 92,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      constraints: const BoxConstraints(
+        minHeight: 98,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
         color: TColor.rojo,
         borderRadius: BorderRadius.circular(20),
@@ -489,22 +491,26 @@ class _AchievementStatCard extends StatelessWidget {
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             icon,
             color: TColor.blanco,
-            size: 22,
+            size: 21,
           ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: TColor.blanco,
-              fontWeight: FontWeight.w900,
-              fontSize: 17,
+          const SizedBox(height: 5),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: TColor.blanco,
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+              ),
             ),
           ),
           const SizedBox(height: 2),
@@ -514,8 +520,8 @@ class _AchievementStatCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: TColor.blanco.withOpacity(0.85),
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
