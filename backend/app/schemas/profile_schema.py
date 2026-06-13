@@ -16,6 +16,8 @@ class ProfileResponse(BaseModel):
 
     goal: Optional[str] = None
 
+    profile_image_path: Optional[str] = None
+
     class Config:
         from_attributes = True
 

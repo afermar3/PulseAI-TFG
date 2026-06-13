@@ -13,6 +13,8 @@ import 'package:afermar3_tf_ipc/services/auth_service.dart';
 import 'package:afermar3_tf_ipc/services/profile_service.dart';
 import 'package:afermar3_tf_ipc/widgets/boton.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:afermar3_tf_ipc/services/api_client.dart';
 
 class Perfil extends StatefulWidget {
   const Perfil({super.key});
@@ -249,6 +251,70 @@ class _PerfilWidget extends State<Perfil> {
     return "assets/img/avatar_otro.png";
   }
 
+  String? _profileImageUrl() {
+    final path = profile?["profile_image_path"]?.toString();
+
+    if (path == null || path.trim().isEmpty || path == "null") {
+      return null;
+    }
+
+    if (path.startsWith("http")) {
+      return path;
+    }
+
+    return "${ApiClient.baseUrl}$path";
+  }
+
+  Future<void> _pickAndUploadProfileImage() async {
+    try {
+      final picker = ImagePicker();
+
+      final pickedImage = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+        maxWidth: 900,
+      );
+
+      if (pickedImage == null) return;
+
+      setState(() {
+        isLoadingProfile = true;
+      });
+
+      final updatedProfile = await ProfileService.uploadProfileImage(
+        image: pickedImage,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        profile = updatedProfile;
+        isLoadingProfile = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Imagen de perfil actualizada correctamente"),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoadingProfile = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst("Exception: ", ""),
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final height = profile?["height_cm"] == null
@@ -406,25 +472,64 @@ class _PerfilWidget extends State<Perfil> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 66,
-            height: 66,
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  TColor.rojo.withOpacity(0.9),
-                  TColor.rojo,
-                ],
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(40),
-              child: Image.asset(
-                _defaultAvatarByGender(profile?["gender"]),
-                fit: BoxFit.cover,
-              ),
+          GestureDetector(
+            onTap: _pickAndUploadProfileImage,
+            child: Stack(
+              children: [
+                Container(
+                  width: 66,
+                  height: 66,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [
+                        TColor.rojo.withOpacity(0.9),
+                        TColor.rojo,
+                      ],
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(40),
+                    child: _profileImageUrl() != null
+                        ? Image.network(
+                            _profileImageUrl()!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Image.asset(
+                                _defaultAvatarByGender(profile?["gender"]),
+                                fit: BoxFit.cover,
+                              );
+                            },
+                          )
+                        : Image.asset(
+                            _defaultAvatarByGender(profile?["gender"]),
+                            fit: BoxFit.cover,
+                          ),
+                  ),
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: TColor.rojo,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: TColor.blanco,
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt_rounded,
+                      color: Colors.white,
+                      size: 12,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 16),

@@ -100,6 +100,8 @@ class UserProfile(Base):
 
     goal = Column(String, nullable=True)
 
+    profile_image_path = Column(String, nullable=True)
+
     user = relationship("User", back_populates="profile")
 
 
