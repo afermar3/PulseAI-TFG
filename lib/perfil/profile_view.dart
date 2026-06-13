@@ -120,7 +120,7 @@ class _PerfilWidget extends State<Perfil> {
     }
   }
 
-    Future<void> _openEditPersonalInfo() async {
+  Future<void> _openEditPersonalInfo() async {
     if (profile == null) return;
 
     final result = await Navigator.push(
@@ -229,6 +229,24 @@ class _PerfilWidget extends State<Perfil> {
     }
 
     return text;
+  }
+
+  String _defaultAvatarByGender(dynamic gender) {
+    final normalizedGender = gender?.toString().trim().toLowerCase() ?? "";
+
+    if (normalizedGender == "hombre" ||
+        normalizedGender == "masculino" ||
+        normalizedGender == "male") {
+      return "assets/img/avatar_hombre.png";
+    }
+
+    if (normalizedGender == "mujer" ||
+        normalizedGender == "femenino" ||
+        normalizedGender == "female") {
+      return "assets/img/avatar_mujer.png";
+    }
+
+    return "assets/img/avatar_otro.png";
   }
 
   @override
@@ -404,7 +422,7 @@ class _PerfilWidget extends State<Perfil> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(40),
               child: Image.asset(
-                "assets/img/foto.png",
+                _defaultAvatarByGender(profile?["gender"]),
                 fit: BoxFit.cover,
               ),
             ),
