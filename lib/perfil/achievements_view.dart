@@ -541,20 +541,30 @@ class _AchievementCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final unlocked = achievement.unlocked;
 
+    final Color unlockedColor = Colors.green;
+    final Color borderColor =
+        unlocked ? unlockedColor.withOpacity(0.55) : Colors.grey.shade200;
+    final Color backgroundColor =
+        unlocked ? unlockedColor.withOpacity(0.045) : Colors.grey.shade50;
+    final Color iconBackgroundColor =
+        unlocked ? unlockedColor.withOpacity(0.12) : Colors.grey.shade200;
+    final Color iconColor = unlocked ? unlockedColor : TColor.gris;
+    final Color badgeBackgroundColor =
+        unlocked ? unlockedColor.withOpacity(0.12) : Colors.grey.shade200;
+    final Color badgeTextColor = unlocked ? unlockedColor : TColor.gris;
+
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: unlocked ? TColor.blanco : Colors.grey.shade50,
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: unlocked
-              ? TColor.rojo.withOpacity(0.16)
-              : Colors.grey.shade200,
+          color: borderColor,
         ),
         boxShadow: unlocked
             ? [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.045),
+                  color: unlockedColor.withOpacity(0.10),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),
@@ -567,14 +577,12 @@ class _AchievementCard extends StatelessWidget {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: unlocked
-                  ? TColor.rojo.withOpacity(0.12)
-                  : Colors.grey.shade200,
+              color: iconBackgroundColor,
               borderRadius: BorderRadius.circular(18),
             ),
             child: Icon(
               unlocked ? achievement.icon : Icons.lock_outline_rounded,
-              color: unlocked ? TColor.rojo : TColor.gris,
+              color: iconColor,
               size: 27,
             ),
           ),
@@ -611,15 +619,13 @@ class _AchievementCard extends StatelessWidget {
               vertical: 6,
             ),
             decoration: BoxDecoration(
-              color: unlocked
-                  ? TColor.rojo.withOpacity(0.10)
-                  : Colors.grey.shade200,
+              color: badgeBackgroundColor,
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
               unlocked ? "Hecho" : achievement.progressText,
               style: TextStyle(
-                color: unlocked ? TColor.rojo : TColor.gris,
+                color: badgeTextColor,
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
               ),

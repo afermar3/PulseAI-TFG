@@ -1,6 +1,7 @@
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/perfil/edit_personal_info_view.dart';
 import 'package:afermar3_tf_ipc/services/profile_service.dart';
+import 'package:afermar3_tf_ipc/services/api_client.dart';
 import 'package:flutter/material.dart';
 
 class PersonalInfoView extends StatefulWidget {
@@ -94,6 +95,38 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
     }
 
     return text;
+  }
+
+  String _defaultAvatarByGender(dynamic gender) {
+    final normalizedGender = gender?.toString().trim().toLowerCase() ?? "";
+
+    if (normalizedGender == "hombre" ||
+        normalizedGender == "masculino" ||
+        normalizedGender == "male") {
+      return "assets/img/avatar_male.png";
+    }
+
+    if (normalizedGender == "mujer" ||
+        normalizedGender == "femenino" ||
+        normalizedGender == "female") {
+      return "assets/img/avatar_female.png";
+    }
+
+    return "assets/img/avatar_neutral.png";
+  }
+
+  String? _profileImageUrl() {
+    final path = _profile["profile_image_path"]?.toString();
+
+    if (path == null || path.trim().isEmpty || path == "null") {
+      return null;
+    }
+
+    if (path.startsWith("http")) {
+      return path;
+    }
+
+    return "${ApiClient.baseUrl}$path";
   }
 
   String _fullName() {
@@ -253,6 +286,8 @@ class _PersonalInfoViewState extends State<PersonalInfoView> {
                   fullName: _fullName(),
                   goal: goal,
                   gender: gender,
+                  imageUrl: _profileImageUrl(),
+                  defaultAvatar: _defaultAvatarByGender(_profile["gender"]),
                 ),
                 const SizedBox(height: 18),
                 Row(
@@ -385,11 +420,15 @@ class _ProfileSummaryCard extends StatelessWidget {
   final String fullName;
   final String goal;
   final String gender;
+  final String? imageUrl;
+  final String defaultAvatar;
 
   const _ProfileSummaryCard({
     required this.fullName,
     required this.goal,
     required this.gender,
+    required this.imageUrl,
+    required this.defaultAvatar,
   });
 
   @override
@@ -427,10 +466,21 @@ class _ProfileSummaryCard extends StatelessWidget {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(40),
-              child: Image.asset(
-                "assets/img/foto.png",
-                fit: BoxFit.cover,
-              ),
+              child: imageUrl != null
+                  ? Image.network(
+                      imageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Image.asset(
+                          defaultAvatar,
+                          fit: BoxFit.cover,
+                        );
+                      },
+                    )
+                  : Image.asset(
+                      defaultAvatar,
+                      fit: BoxFit.cover,
+                    ),
             ),
           ),
           const SizedBox(width: 16),
