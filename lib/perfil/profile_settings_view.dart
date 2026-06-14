@@ -4,6 +4,7 @@ import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
 import 'package:afermar3_tf_ipc/perfil/contact_view.dart';
 import 'package:afermar3_tf_ipc/perfil/privacy_policy_view.dart';
 import 'package:afermar3_tf_ipc/services/auth_service.dart';
+import 'package:afermar3_tf_ipc/perfil/change_password_view.dart';
 import 'package:flutter/material.dart';
 
 class ProfileSettingsView extends StatefulWidget {
@@ -41,6 +42,15 @@ class _ProfileSettingsViewState extends State<ProfileSettingsView> {
       context,
       MaterialPageRoute(
         builder: (context) => const ContactView(),
+      ),
+    );
+  }
+
+  void _openChangePassword() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ChangePasswordView(),
       ),
     );
   }
@@ -322,7 +332,8 @@ class _ProfileSettingsViewState extends State<ProfileSettingsView> {
         _SwitchSettingRow(
           icon: Icons.psychology_alt_outlined,
           title: "Usar contexto personal",
-          subtitle: "Permite que el Coach tenga en cuenta tu perfil y progreso.",
+          subtitle:
+              "Permite que el Coach tenga en cuenta tu perfil y progreso.",
           value: _coachContextEnabled,
           onChanged: (value) {
             setState(() {
@@ -358,7 +369,8 @@ class _ProfileSettingsViewState extends State<ProfileSettingsView> {
         _SwitchSettingRow(
           icon: Icons.notifications_active_outlined,
           title: "Notificaciones internas",
-          subtitle: "Mostrar avisos de entreno, sueño y progreso dentro de la app.",
+          subtitle:
+              "Mostrar avisos de entreno, sueño y progreso dentro de la app.",
           value: _internalNotificationsEnabled,
           onChanged: (value) {
             setState(() {
@@ -386,6 +398,12 @@ class _ProfileSettingsViewState extends State<ProfileSettingsView> {
     return _SettingsSection(
       title: "Cuenta y soporte",
       children: [
+        _NavigationSettingRow(
+          icon: Icons.lock_reset_rounded,
+          title: "Cambiar contraseña",
+          subtitle: "Actualiza la contraseña de acceso a tu cuenta.",
+          onTap: _openChangePassword,
+        ),
         _NavigationSettingRow(
           icon: Icons.privacy_tip_outlined,
           title: "Política de privacidad",

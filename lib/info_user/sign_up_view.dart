@@ -27,6 +27,8 @@ class _SignUpView extends State<SignUp> {
   final TextEditingController surnameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
 
   @override
   void dispose() {
@@ -34,6 +36,7 @@ class _SignUpView extends State<SignUp> {
     surnameController.dispose();
     emailController.dispose();
     passwordController.dispose();
+    confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -108,14 +111,11 @@ class _SignUpView extends State<SignUp> {
             child: Column(
               children: [
                 const SizedBox(height: 28),
-
                 Text(
                   "Bienvenido,",
                   style: TextStyle(color: TColor.gris, fontSize: 17),
                 ),
-
                 const SizedBox(height: 4),
-
                 Text(
                   "Crear cuenta",
                   style: TextStyle(
@@ -124,27 +124,21 @@ class _SignUpView extends State<SignUp> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-
                 SizedBox(height: media.height * 0.045),
-
                 EditTextField(
                   controller: nameController,
                   hintText: "Nombre",
                   icon: "assets/img/user_text.png",
                   validator: validateName,
                 ),
-
                 const SizedBox(height: 16),
-
                 EditTextField(
                   controller: surnameController,
                   hintText: "Apellidos",
                   icon: "assets/img/user_text.png",
                   validator: validateapellido,
                 ),
-
                 const SizedBox(height: 16),
-
                 EditTextField(
                   controller: emailController,
                   hintText: "Correo electrónico",
@@ -152,9 +146,7 @@ class _SignUpView extends State<SignUp> {
                   keyboardType: TextInputType.emailAddress,
                   validator: validateEmail,
                 ),
-
                 const SizedBox(height: 16),
-
                 EditTextField(
                   controller: passwordController,
                   hintText: "Contraseña",
@@ -178,9 +170,41 @@ class _SignUpView extends State<SignUp> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+                EditTextField(
+                  controller: confirmPasswordController,
+                  hintText: "Repetir contraseña",
+                  icon: "assets/img/lock.png",
+                  obscureText: obscurePassword,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Repite la contraseña';
+                    }
 
+                    if (value != passwordController.text) {
+                      return 'Las contraseñas no coinciden';
+                    }
+
+                    return null;
+                  },
+                  rightIcon: IconButton(
+                    onPressed: isLoading
+                        ? null
+                        : () {
+                            setState(() {
+                              obscurePassword = !obscurePassword;
+                            });
+                          },
+                    icon: Icon(
+                      obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: TColor.negro,
+                      size: 22,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 12),
-
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -214,16 +238,12 @@ class _SignUpView extends State<SignUp> {
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 70),
-
+                const SizedBox(height: 40),
                 botonredondo(
                   title: isLoading ? "Registrando..." : "Registrarme",
                   onPressed: isLoading ? () {} : _register,
                 ),
-
                 const SizedBox(height: 26),
-
                 TextButton(
                   onPressed: isLoading
                       ? null
@@ -254,7 +274,6 @@ class _SignUpView extends State<SignUp> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 20),
               ],
             ),
@@ -280,7 +299,6 @@ class _SignUpView extends State<SignUp> {
     });
   }
 }
-
 
 String? validateName(String? value) {
   if (value == null || value.trim().isEmpty) {

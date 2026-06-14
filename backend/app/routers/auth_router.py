@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from app.core.security import (
     create_access_token,
     create_password_reset_token,
+    get_current_user,
     hash_password,
     hash_password_reset_token,
     verify_password,
@@ -14,6 +15,7 @@ from app.database.database import get_db
 from app.database.models import PasswordResetToken, User, UserProfile
 from app.schemas.auth_schema import (
     AuthResponse,
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     LoginRequest,
@@ -144,6 +146,41 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
 
     user.password_hash = hash_password(data.new_password)
     reset_token.used = True
+
+    db.commit()
+
+    return {
+        "message": "Contraseña actualizada correctamente",
+    }
+
+
+@router.put("/change-password", response_model=MessageResponse)
+def change_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.id == current_user.id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado",
+        )
+
+    if not verify_password(data.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña actual no es correcta",
+        )
+
+    if verify_password(data.new_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña no puede ser igual a la actual",
+        )
+
+    user.password_hash = hash_password(data.new_password)
 
     db.commit()
 

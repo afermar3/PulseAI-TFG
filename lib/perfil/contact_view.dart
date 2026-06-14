@@ -21,7 +21,6 @@ class _ContactViewState extends State<ContactView> {
     "Problema con la cuenta",
     "Sugerencia",
     "Entrenamientos",
-    "Nutrición",
     "Otro",
   ];
 
