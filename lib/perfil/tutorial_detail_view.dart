@@ -1,4 +1,5 @@
 import 'package:afermar3_tf_ipc/pantallas_iniciales/pantallas.dart';
+import 'package:afermar3_tf_ipc/perfil/tutorial_video_player.dart';
 import 'package:flutter/material.dart';
 
 class TutorialDetailView extends StatelessWidget {
@@ -335,7 +336,11 @@ class TutorialDetailView extends StatelessWidget {
                 children: [
                   _buildHeaderCard(),
                   const SizedBox(height: 18),
-                  _buildVideoPlaceholder(),
+                  hasVideo
+                      ? TutorialVideoPlayer(
+                          videoPath: videoPath!,
+                        )
+                      : _buildVideoPlaceholder(),
                   const SizedBox(height: 18),
                   _buildStepsSection(),
                   const SizedBox(height: 18),

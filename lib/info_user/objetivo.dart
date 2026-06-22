@@ -57,7 +57,9 @@ class _ObjetivoViewState extends State<objetivo> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => const MainTabView(),
+          builder: (context) => const MainTabView(
+            showTutorialPrompt: true,
+          ),
         ),
       );
     } catch (e) {
@@ -92,7 +94,6 @@ class _ObjetivoViewState extends State<objetivo> {
           child: Column(
             children: [
               const SizedBox(height: 16),
-
               Row(
                 children: [
                   IconButton(
@@ -105,9 +106,7 @@ class _ObjetivoViewState extends State<objetivo> {
                   const Spacer(),
                 ],
               ),
-
               const SizedBox(height: 8),
-
               Text(
                 "¿Cuál es tu objetivo?",
                 textAlign: TextAlign.center,
@@ -117,9 +116,7 @@ class _ObjetivoViewState extends State<objetivo> {
                   fontWeight: FontWeight.w800,
                 ),
               ),
-
               const SizedBox(height: 8),
-
               Text(
                 "Elige el objetivo principal para que podamos adaptar mejor tu experiencia.",
                 textAlign: TextAlign.center,
@@ -129,9 +126,7 @@ class _ObjetivoViewState extends State<objetivo> {
                   height: 1.4,
                 ),
               ),
-
               const SizedBox(height: 34),
-
               Expanded(
                 child: CarouselSlider.builder(
                   carouselController: carouselController,
@@ -176,9 +171,7 @@ class _ObjetivoViewState extends State<objetivo> {
                                 fit: BoxFit.contain,
                               ),
                             ),
-
                             const SizedBox(height: 22),
-
                             Text(
                               item["titulo"]!,
                               textAlign: TextAlign.center,
@@ -188,9 +181,7 @@ class _ObjetivoViewState extends State<objetivo> {
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
-
                             const SizedBox(height: 10),
-
                             Container(
                               width: 42,
                               height: 3,
@@ -199,9 +190,7 @@ class _ObjetivoViewState extends State<objetivo> {
                                 borderRadius: BorderRadius.circular(20),
                               ),
                             ),
-
                             const SizedBox(height: 18),
-
                             Text(
                               item["info"]!,
                               textAlign: TextAlign.center,
@@ -234,9 +223,7 @@ class _ObjetivoViewState extends State<objetivo> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 18),
-
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
@@ -266,9 +253,7 @@ class _ObjetivoViewState extends State<objetivo> {
                   },
                 ),
               ),
-
               const SizedBox(height: 28),
-
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -292,7 +277,6 @@ class _ObjetivoViewState extends State<objetivo> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
             ],
           ),

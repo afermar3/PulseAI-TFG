@@ -13,6 +13,7 @@ class AppTutorialsView extends StatelessWidget {
         description:
             "Este tutorial explica cómo moverte por la app y qué función tiene cada apartado principal.",
         icon: Icons.explore_outlined,
+        videoPath: "assets/videos/video_primeros_pasos.mp4",
         steps: [
           "Abre PulseAI e inicia sesión con tu cuenta.",
           "Revisa el Home para consultar un resumen de tu actividad, sueño y progreso.",
@@ -31,6 +32,7 @@ class AppTutorialsView extends StatelessWidget {
         description:
             "Aprende a crear una rutina de entrenamiento con ayuda de la inteligencia artificial.",
         icon: Icons.auto_awesome_rounded,
+        videoPath: "assets/videos/crear_rutina_ia.mp4",
         steps: [
           "Entra en la pantalla de Entrenamientos.",
           "Pulsa el botón Rutina IA.",
@@ -50,6 +52,7 @@ class AppTutorialsView extends StatelessWidget {
         description:
             "Este tutorial muestra cómo registrar una sesión de entrenamiento desde una rutina activa.",
         icon: Icons.fitness_center_rounded,
+        videoPath: "assets/videos/video_entrenamiento.mp4",
         steps: [
           "Entra en Entrenamientos.",
           "Consulta el entrenamiento de hoy o los días de tu rutina activa.",
@@ -327,7 +330,7 @@ class AppTutorialsView extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              "Más adelante se podrán añadir vídeos cortos a estos tutoriales sin cambiar la estructura de la pantalla.",
+              "Los tutoriales principales incluyen vídeos cortos y pasos guiados para facilitar el uso de PulseAI.",
               style: TextStyle(
                 color: TColor.gris,
                 fontSize: 12,

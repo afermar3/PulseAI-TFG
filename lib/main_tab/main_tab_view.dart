@@ -1,14 +1,19 @@
 import 'package:afermar3_tf_ipc/perfil/profile_view.dart';
 import 'package:afermar3_tf_ipc/widgets/color_extension.dart';
 import 'package:flutter/material.dart';
-
+import 'package:afermar3_tf_ipc/perfil/app_tutorials_view.dart';
 import '../IA/ia_coach_view.dart';
 import '../home/pantalla_home.dart';
 import '../main_tab/select_view.dart';
 import '../photo_progress/photo_progress_view.dart';
 
 class MainTabView extends StatefulWidget {
-  const MainTabView({super.key});
+  final bool showTutorialPrompt;
+
+  const MainTabView({
+    super.key,
+    this.showTutorialPrompt = false,
+  });
 
   @override
   State<MainTabView> createState() => _MainTabViewState();
@@ -20,6 +25,73 @@ class _MainTabViewState extends State<MainTabView> {
   final PageStorageBucket pageBucket = PageStorageBucket();
 
   Widget currentTab = const Home();
+
+  @override
+  void initState() {
+    super.initState();
+
+    if (widget.showTutorialPrompt) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showTutorialPrompt();
+      });
+    }
+  }
+
+  Future<void> _showTutorialPrompt() async {
+    if (!mounted) return;
+
+    final goToTutorials = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+          ),
+          title: const Text(
+            "¿Quieres ver los tutoriales?",
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: const Text(
+            "Te recomendamos ver una guía rápida para aprender a usar PulseAI: primeros pasos, crear rutinas con IA y registrar entrenamientos.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context, false);
+              },
+              child: const Text("Más tarde"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context, true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TColor.rojo,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text("Ver tutoriales"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (goToTutorials == true && mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const AppTutorialsView(),
+        ),
+      );
+    }
+  }
 
   void _changeTab(int index, Widget screen) {
     setState(() {
